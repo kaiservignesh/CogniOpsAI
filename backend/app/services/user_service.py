@@ -53,3 +53,45 @@ def create_user(db: Session, user):
     db.refresh(db_user)
 
     return db_user
+
+def get_user_by_id(db: Session, user_id: int):
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    return user
+
+def update_user(db: Session, user_id: int, user):
+    db_user = db.query(User).filter(User.id == user_id).first()
+
+    if not db_user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    db_user.username = user.username
+    db_user.email = user.email
+
+    db.commit()
+    db.refresh(db_user)
+
+    return db_user
+
+def delete_user(db: Session, user_id: int):
+    db_user = db.query(User).filter(User.id == user_id).first()
+
+    if not db_user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    db.delete(db_user)
+    db.commit()
+
+    return {"message": "User deleted successfully"}

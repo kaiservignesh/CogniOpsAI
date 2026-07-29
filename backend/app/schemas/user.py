@@ -5,6 +5,9 @@ class UserCreate(BaseModel):
     username: str
     email: EmailStr
 
+class UserUpdate(BaseModel):
+    username: str
+    email: EmailStr
 
 class UserResponse(UserCreate):
     id: int
