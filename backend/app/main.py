@@ -1,7 +1,10 @@
 # Application entry point
 from fastapi import FastAPI
 from app.api.user import router as user_router
-from app.exceptions.handlers import register_exception_handlers
+
+from app.core.logger import logger
+
+logger.info("CogniOps AI started successfully")
 
 
 
@@ -9,8 +12,6 @@ app = FastAPI(
     title="CogniOps AI",
     version="1.0.0"
 )
-
-register_exception_handlers(app)
 
 @app.get("/")
 def root():
