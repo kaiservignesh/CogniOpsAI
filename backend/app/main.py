@@ -1,8 +1,8 @@
 # Application entry point
-from fastapi import FastAPI
 from app.api.user import router as user_router
-
+from app.auth.router import router as auth_router
 from app.core.logger import logger
+from fastapi import FastAPI
 
 logger.info("CogniOps AI started successfully")
 
@@ -22,3 +22,4 @@ def health():
     return {"status": "Healthy"}
 
 app.include_router(user_router)
+app.include_router(auth_router)
