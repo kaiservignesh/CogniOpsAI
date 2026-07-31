@@ -1,8 +1,7 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Integer, String, Text
-
 from app.database.database import Base
+from sqlalchemy import Column, DateTime, Integer, String, Text
 
 
 class Alert(Base):
