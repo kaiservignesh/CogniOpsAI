@@ -9,13 +9,11 @@ router = APIRouter(
     tags=["Authentication"],
 )
 
-db_dependency = Depends(get_db)
-
 
 @router.post("/login", response_model=TokenResponse)
 def login(
     login_data: LoginRequest,
-    db: Session = db_dependency,
+    db: Session = Depends(get_db),  # noqa: B008
 ):
     token = authenticate_user(
         db,
