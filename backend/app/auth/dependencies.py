@@ -2,16 +2,19 @@ from app.auth.security import decode_access_token
 from app.database.database import get_db
 from app.models.user import User
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+
+security = HTTPBearer()
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    credentials: HTTPAuthorizationCredentials = Depends(security),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ):
+    token = credentials.credentials
+
     username = decode_access_token(token)
 
     if username is None:
@@ -20,7 +23,9 @@ def get_current_user(
             detail="Invalid or expired token",
         )
 
-    user = db.query(User).filter(User.username == username).first()
+    user = db.query(User).filter(
+        User.username == username
+    ).first()
 
     if user is None:
         raise HTTPException(

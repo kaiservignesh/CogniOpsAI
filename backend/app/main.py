@@ -1,8 +1,9 @@
 # Application entry point
+from app.alerts.router import router as alert_router
 from app.api.user import router as user_router
 from app.auth.router import router as auth_router
 from app.core.logger import logger
-from app.alerts.router import router as alert_router
+from app.integrations.router import router as integration_router
 from fastapi import FastAPI
 
 logger.info("CogniOps AI started successfully")
@@ -25,3 +26,4 @@ def health():
 app.include_router(user_router)
 app.include_router(auth_router)
 app.include_router(alert_router)
+app.include_router(integration_router)
