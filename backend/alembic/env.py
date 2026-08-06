@@ -4,6 +4,7 @@ from logging.config import fileConfig
 from alembic import context
 from app.alerts.model import Alert
 from app.database.database import Base
+from app.models.situation import Situation
 from app.models.user import User
 from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool

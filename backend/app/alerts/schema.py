@@ -11,6 +11,8 @@ class AlertCreate(BaseModel):
     severity: str
     policy_name: Optional[str] = None
     tags: Optional[str] = None
+    service: Optional[str] = None
+    environment: Optional[str] = None
 
 
 class AlertUpdate(BaseModel):
@@ -21,6 +23,8 @@ class AlertUpdate(BaseModel):
     status: Optional[str] = None
     policy_name: Optional[str] = None
     tags: Optional[str] = None
+    service: Optional[str] = None
+    environment: Optional[str] = None
 
 
 class AlertResponse(BaseModel):
@@ -32,6 +36,8 @@ class AlertResponse(BaseModel):
     status: str
     policy_name: Optional[str]
     tags: Optional[str]
+    service: Optional[str]
+    environment: Optional[str]
     created_at: datetime
     updated_at: datetime
 

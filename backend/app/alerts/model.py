@@ -1,7 +1,16 @@
 from datetime import datetime
+from app.models.situation import Situation
 
 from app.database.database import Base
-from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy import (
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
+from sqlalchemy.orm import relationship
 
 
 class Alert(Base):
@@ -25,6 +34,27 @@ class Alert(Base):
     policy_name = Column(String(255), nullable=True)
 
     tags = Column(String(500), nullable=True)
+
+    service = Column(
+        String(255),
+        nullable=True,
+    )
+
+    environment = Column(
+        String(100),
+        nullable=True,
+    )
+
+    situation_id = Column(
+        Integer,
+        ForeignKey("situations.id"),
+        nullable=True,
+    )
+
+    situation = relationship(
+        "Situation",
+        back_populates="alerts",
+    )
 
     created_at = Column(
         DateTime,
