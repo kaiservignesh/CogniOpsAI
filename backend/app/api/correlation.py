@@ -12,7 +12,6 @@ router = APIRouter(
     tags=["Correlation"],
 )
 
-
 @router.post(
     "/alerts/{alert_id}",
     response_model=dict,
@@ -24,16 +23,18 @@ def correlate_alert(
 ):
     service = CorrelationService()
 
-    situation = service.correlate_alert(
+    result = service.correlate_alert(
         db,
         alert_id,
     )
 
-    if situation is None:
+    if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No related alerts found",
+            detail="No related alerts or situations found",
         )
+
+    situation = result["situation"]
 
     return {
         "message": "Alert correlation completed",
@@ -41,4 +42,6 @@ def correlate_alert(
         "title": situation.title,
         "severity": situation.severity,
         "status": situation.status,
+        "correlation_score": result["score"],
+        "correlation_reasons": result["reasons"],
     }
