@@ -2,19 +2,23 @@ from app.auth.dependencies import get_current_user
 from app.database.database import get_db
 from app.models.user import User
 from app.schemas.situation import (
+    SituationContextResponse,
     SituationCreate,
     SituationResponse,
     SituationUpdate,
+)
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from app.schemas.situation import (
+    SituationContextResponse,
 )
 from app.services.situation_service import (
     create_situation,
     get_all_situations,
     get_situation_by_id,
+    get_situation_context,
     update_situation,
 )
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-
 
 router = APIRouter(
     prefix="/situations",
@@ -92,3 +96,25 @@ def edit_situation(
         )
 
     return updated_situation
+
+@router.get(
+    "/{situation_id}/context",
+    response_model=SituationContextResponse,
+)
+def get_situation_context_api(
+    situation_id: int,
+    db: Session = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
+):
+    context = get_situation_context(
+        db,
+        situation_id,
+    )
+
+    if context is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Situation not found",
+        )
+
+    return context

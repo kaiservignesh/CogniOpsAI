@@ -1,6 +1,10 @@
 from app.models.situation import Situation
 from app.schemas.situation import SituationCreate, SituationUpdate
 from sqlalchemy.orm import Session
+from app.alerts.model import Alert
+from app.schemas.situation import (
+    SituationContextResponse,
+)
 
 
 def create_situation(
@@ -63,3 +67,50 @@ def update_situation(
     db.refresh(situation)
 
     return situation
+
+def get_situation_context(
+    db: Session,
+    situation_id: int,
+):
+    situation = get_situation_by_id(
+        db,
+        situation_id,
+    )
+
+    if situation is None:
+        return None
+
+    alerts = (
+        db.query(Alert)
+        .filter(
+            Alert.situation_id == situation_id
+        )
+        .order_by(Alert.created_at.asc())
+        .all()
+    )
+
+    return {
+        "id": situation.id,
+        "title": situation.title,
+        "description": situation.description,
+        "severity": situation.severity,
+        "status": situation.status,
+        "service": situation.service,
+        "environment": situation.environment,
+        "created_at": situation.created_at,
+        "updated_at": situation.updated_at,
+        "alert_count": len(alerts),
+        "alerts": [
+            {
+                "id": alert.id,
+                "title": alert.title,
+                "source": alert.source,
+                "severity": alert.severity,
+                "service": alert.service,
+                "environment": alert.environment,
+                "policy_name": alert.policy_name,
+                "tags": alert.tags,
+            }
+            for alert in alerts
+        ],
+    }

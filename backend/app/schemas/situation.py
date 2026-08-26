@@ -29,5 +29,22 @@ class SituationResponse(SituationBase):
     id: int
     created_at: datetime
     updated_at: datetime
+    alert_count: int
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True
+    )
+
+class SituationAlertContext(BaseModel):
+    id: int
+    title: str
+    source: str
+    severity: str
+    service: str | None = None
+    environment: str | None = None
+    policy_name: str | None = None
+    tags: str | None = None
+
+
+class SituationContextResponse(SituationResponse):
+    alerts: list[SituationAlertContext]
