@@ -5,6 +5,7 @@ from app.models.situation import Situation
 from app.models.user import User
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from app.alerts.model import Alert
 
 
 router = APIRouter(
@@ -44,4 +45,36 @@ def correlate_alert(
         "status": situation.status,
         "correlation_score": result["score"],
         "correlation_reasons": result["reasons"],
+    }
+
+@router.post(
+    "/alerts/{alert_id}/analyze"
+)
+def analyze_alert_correlation(
+    alert_id: int,
+    db: Session = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
+):
+    alert = (
+        db.query(Alert)
+        .filter(Alert.id == alert_id)
+        .first()
+    )
+
+    if alert is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Alert not found",
+        )
+
+    service = CorrelationService()
+
+    result = service.hybrid_correlation_analysis(
+        db,
+        alert,
+    )
+
+    return {
+        "alert_id": alert_id,
+        **result,
     }

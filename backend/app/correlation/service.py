@@ -2,11 +2,13 @@ from app.alerts.model import Alert
 from app.correlation.engine import CorrelationEngine
 from app.models.situation import Situation
 from sqlalchemy.orm import Session
+from app.ai.correlation import HistoricalCorrelation
 
 
 class CorrelationService:
     def __init__(self):
         self.engine = CorrelationEngine()
+        self.historical = HistoricalCorrelation()
 
     def find_related_alerts(
         self,
@@ -255,3 +257,74 @@ class CorrelationService:
         db.refresh(situation)
 
         return situation
+
+    def hybrid_correlation_analysis(
+        self,
+        db: Session,
+        alert: Alert,
+    ):
+        related_alerts = self.find_related_alerts(
+            db,
+            alert,
+        )
+
+        if not related_alerts:
+            return {
+                "rule_score": 0,
+                "historical_score": 0.0,
+                "hybrid_score": 0.0,
+                "reasons": [],
+            }
+
+        best_rule_score = 0
+        best_reasons = []
+
+        for candidate in related_alerts:
+            score = self.engine.calculate_score(
+                alert,
+                candidate,
+            )
+
+            if score > best_rule_score:
+                best_rule_score = score
+                best_reasons = (
+                    self.engine.get_reasons(
+                        alert,
+                        candidate,
+                    )
+                )
+
+        context = {
+            "title": alert.title,
+            "description": alert.description,
+            "service": alert.service,
+            "environment": alert.environment,
+            "alerts": [
+                {
+                    "title": alert.title,
+                }
+            ],
+        }
+
+        historical_score = (
+            self.historical.calculate_similarity_score(
+                context
+            )
+        )
+
+        hybrid_score = (
+            self.engine.calculate_hybrid_score(
+                best_rule_score,
+                historical_score,
+            )
+        )
+
+        return {
+            "rule_score": best_rule_score,
+            "historical_score": historical_score,
+            "hybrid_score": round(
+                hybrid_score,
+                2,
+            ),
+            "reasons": best_reasons,
+        }

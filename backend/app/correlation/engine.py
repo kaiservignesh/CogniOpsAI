@@ -92,3 +92,13 @@ class CorrelationEngine:
                 )
 
         return highest_severity
+
+    def calculate_hybrid_score(
+        self,
+        rule_score: int,
+        historical_score: float,
+    ) -> float:
+        return (
+            (rule_score * 0.8)
+            + (historical_score * 0.2)
+        )
