@@ -1,8 +1,8 @@
+from app.ai.correlation import HistoricalCorrelation
 from app.alerts.model import Alert
 from app.correlation.engine import CorrelationEngine
 from app.models.situation import Situation
 from sqlalchemy.orm import Session
-from app.ai.correlation import HistoricalCorrelation
 
 
 class CorrelationService:
@@ -92,11 +92,27 @@ class CorrelationService:
         db: Session,
         alert: Alert,
         situation: Situation,
+        correlation_score: float | None = None,
+        correlation_reasons: list[str] | None = None,
+        correlation_method: str = "rule + historical",
     ):
         alert.situation_id = situation.id
 
+        if correlation_score is not None:
+            situation.correlation_score = correlation_score
+
+        if correlation_reasons is not None:
+            situation.correlation_reasons = (
+                correlation_reasons
+            )
+
+        situation.correlation_method = (
+            correlation_method
+        )
+
         db.commit()
         db.refresh(alert)
+        db.refresh(situation)
 
         return self.update_situation_severity(
             db,
@@ -108,6 +124,9 @@ class CorrelationService:
         db: Session,
         alert: Alert,
         related_alerts: list[Alert],
+        correlation_score: float = 0.0,
+        correlation_method: str = "rule-based",
+        correlation_reasons: list[str] | None = None,
     ) -> Situation:
         all_alerts = [
             alert,
@@ -115,7 +134,10 @@ class CorrelationService:
         ]
 
         situation = Situation(
-            title=f"Correlated incident: {alert.title}",
+            title=(
+                f"Correlated incident: "
+                f"{alert.title}"
+            ),
             description=(
                 f"Situation created from alert "
                 f"{alert.id} and "
@@ -130,6 +152,11 @@ class CorrelationService:
             status="Open",
             service=alert.service,
             environment=alert.environment,
+            correlation_score=correlation_score,
+            correlation_method=correlation_method,
+            correlation_reasons=(
+                correlation_reasons or []
+            ),
         )
 
         db.add(situation)
@@ -138,7 +165,9 @@ class CorrelationService:
         alert.situation_id = situation.id
 
         for related_alert in related_alerts:
-            related_alert.situation_id = situation.id
+            related_alert.situation_id = (
+                situation.id
+            )
 
         db.commit()
         db.refresh(situation)
@@ -159,7 +188,7 @@ class CorrelationService:
         if alert is None:
             return None
 
-        # Already correlated
+        # Alert is already associated with a situation.
         if alert.situation_id is not None:
             situation = (
                 db.query(Situation)
@@ -170,16 +199,19 @@ class CorrelationService:
                 .first()
             )
 
+            if situation is None:
+                return None
+
             return {
                 "situation": situation,
                 "score": 100,
                 "reasons": [
-                    "Alert already belongs "
+                    "Alert already belongs ",
                     "to this situation"
                 ],
             }
 
-        # First try existing situations
+        # First try to match an existing situation.
         existing = self.find_existing_situation(
             db,
             alert,
@@ -187,9 +219,12 @@ class CorrelationService:
 
         if existing is not None:
             situation = self.attach_to_situation(
-                db,
-                alert,
-                existing["situation"],
+                db=db,
+                alert=alert,
+                situation=existing["situation"],
+                correlation_score=existing["score"],
+                correlation_reasons=existing["reasons"],
+                correlation_method="rule-based",
             )
 
             return {
@@ -198,7 +233,7 @@ class CorrelationService:
                 "reasons": existing["reasons"],
             }
 
-        # Otherwise try unassigned alerts
+        # Otherwise find related unassigned alerts.
         related_alerts = self.find_related_alerts(
             db,
             alert,
@@ -207,27 +242,35 @@ class CorrelationService:
         if not related_alerts:
             return None
 
-        situation = (
-            self.create_situation_from_alerts(
+        hybrid_result = (
+            self.hybrid_correlation_analysis(
                 db,
                 alert,
                 related_alerts,
             )
         )
 
+        situation = (
+            self.create_situation_from_alerts(
+                db=db,
+                alert=alert,
+                related_alerts=related_alerts,
+                correlation_score=(
+                    hybrid_result["hybrid_score"]
+                ),
+                correlation_method=(
+                    "rule + historical"
+                ),
+                correlation_reasons=(
+                    hybrid_result["reasons"]
+                ),
+            )
+        )
+
         return {
             "situation": situation,
-            "score": max(
-                self.engine.calculate_score(
-                    alert,
-                    related_alerts[0],
-                ),
-                60,
-            ),
-            "reasons": self.engine.get_reasons(
-                alert,
-                related_alerts[0],
-            ),
+            "score": hybrid_result["hybrid_score"],
+            "reasons": hybrid_result["reasons"],
         }
 
     def update_situation_severity(
@@ -262,11 +305,15 @@ class CorrelationService:
         self,
         db: Session,
         alert: Alert,
+        related_alerts: list[Alert] | None = None,
     ):
-        related_alerts = self.find_related_alerts(
-            db,
-            alert,
-        )
+        if related_alerts is None:
+            related_alerts = (
+                self.find_related_alerts(
+                    db,
+                    alert,
+                )
+            )
 
         if not related_alerts:
             return {
@@ -321,7 +368,10 @@ class CorrelationService:
 
         return {
             "rule_score": best_rule_score,
-            "historical_score": historical_score,
+            "historical_score": round(
+                historical_score,
+                2,
+            ),
             "hybrid_score": round(
                 hybrid_score,
                 2,

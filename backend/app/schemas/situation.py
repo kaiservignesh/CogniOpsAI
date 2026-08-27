@@ -31,6 +31,10 @@ class SituationResponse(SituationBase):
     updated_at: datetime
     alert_count: int
 
+    correlation_score: float | None = None
+    correlation_method: str | None = None
+    correlation_reasons: list[str] | None = None
+
     model_config = ConfigDict(
         from_attributes=True
     )

@@ -4,6 +4,16 @@ from app.database.database import Base
 from sqlalchemy import Column, DateTime, Integer, String, Text
 from sqlalchemy.orm import relationship
 
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Float,
+    Integer,
+    JSON,
+    String,
+    Text,
+)
+
 
 class Situation(Base):
     __tablename__ = "situations"
@@ -52,4 +62,19 @@ class Situation(Base):
     alerts = relationship(
         "Alert",
         back_populates="situation",
+    )
+
+    correlation_score = Column(
+        Float,
+        nullable=True,
+    )
+
+    correlation_method = Column(
+        String(100),
+        nullable=True,
+    )
+
+    correlation_reasons = Column(
+        JSON,
+        nullable=True,
     )
