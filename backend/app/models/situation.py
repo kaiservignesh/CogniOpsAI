@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from app.database.database import Base
 from sqlalchemy import Column, DateTime, Integer, String, Text
 from sqlalchemy.orm import relationship
+from sqlalchemy.ext.hybrid import hybrid_property
 
 from sqlalchemy import (
     Column,
@@ -78,3 +79,33 @@ class Situation(Base):
         JSON,
         nullable=True,
     )
+
+    ai_summary = Column(
+        Text,
+        nullable=True,
+    )
+
+    ai_root_cause = Column(
+        Text,
+        nullable=True,
+    )
+
+    ai_recommendations = Column(
+        Text,
+        nullable=True,
+    )
+
+    ai_status = Column(
+        String(50),
+        nullable=False,
+        default="Pending",
+    )
+
+    ai_updated_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    @hybrid_property
+    def alert_count(self):
+        return len(self.alerts)
