@@ -45,6 +45,7 @@ def correlate_alert(
         "status": situation.status,
         "correlation_score": result["score"],
         "correlation_reasons": result["reasons"],
+        "ai_status": situation.ai_status,
     }
 
 @router.post(

@@ -1,7 +1,11 @@
+import os
+
 from app.ai.correlation import HistoricalCorrelation
+from app.ai.service import AIService
 from app.alerts.model import Alert
 from app.correlation.engine import CorrelationEngine
 from app.models.situation import Situation
+from app.services.situation_service import get_situation_context
 from sqlalchemy.orm import Session
 
 
@@ -9,6 +13,15 @@ class CorrelationService:
     def __init__(self):
         self.engine = CorrelationEngine()
         self.historical = HistoricalCorrelation()
+        self.ai_service = AIService()
+
+        self.auto_ai_analysis = (
+            os.getenv(
+                "AUTO_AI_ANALYSIS",
+                "false",
+            ).lower()
+            == "true"
+        )
 
     def find_related_alerts(
         self,
@@ -267,10 +280,16 @@ class CorrelationService:
             )
         )
 
+        ai_result = self.trigger_ai_analysis(
+            db=db,
+            situation_id=situation.id,
+        )
+
         return {
             "situation": situation,
             "score": hybrid_result["hybrid_score"],
             "reasons": hybrid_result["reasons"],
+            "ai_analysis": ai_result,
         }
 
     def update_situation_severity(
@@ -378,3 +397,25 @@ class CorrelationService:
             ),
             "reasons": best_reasons,
         }
+
+    def trigger_ai_analysis(
+        self,
+        db: Session,
+        situation_id: int,
+    ):
+        if not self.auto_ai_analysis:
+            return None
+
+        context = get_situation_context(
+            db,
+            situation_id,
+        )
+
+        if context is None:
+            return None
+
+        return self.ai_service.analyze_situation(
+            db=db,
+            situation_id=situation_id,
+            situation_context=context,
+        )
