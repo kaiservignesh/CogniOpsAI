@@ -125,3 +125,49 @@ def store_situation_context(
     return service.store_situation(
         context
     )
+
+@router.post(
+    "/situations/{situation_id}/analyze"
+)
+def analyze_situation(
+    situation_id: int,
+    db: Session = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
+):
+    context = get_situation_context(
+        db,
+        situation_id,
+    )
+
+    if context is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Situation not found",
+        )
+
+    service = AIService()
+
+    result = service.analyze_situation(
+        db=db,
+        situation_id=situation_id,
+        situation_context=context,
+    )
+
+    if result["status"] == "Failed":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=result["message"],
+        )
+
+    situation = result["situation"]
+
+    return {
+        "situation_id": situation.id,
+        "ai_status": situation.ai_status,
+        "ai_summary": situation.ai_summary,
+        "ai_root_cause": situation.ai_root_cause,
+        "ai_recommendations": (
+            situation.ai_recommendations
+        ),
+        "ai_updated_at": situation.ai_updated_at,
+    }

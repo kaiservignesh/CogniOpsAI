@@ -35,6 +35,13 @@ class SituationResponse(SituationBase):
     correlation_method: str | None = None
     correlation_reasons: list[str] | None = None
 
+    ai_summary: str | None = None
+    ai_root_cause: str | None = None
+    ai_recommendations: str | None = None
+    ai_status: str = "Pending"
+    ai_updated_at: datetime | None = None
+
+
     model_config = ConfigDict(
         from_attributes=True
     )

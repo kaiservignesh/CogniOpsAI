@@ -5,6 +5,12 @@ from app.ai.prompts import (
     build_root_cause_prompt,
     build_situation_summary_prompt,
 )
+from datetime import datetime, timezone
+
+from app.models.situation import Situation
+from sqlalchemy.orm import Session
+import requests
+
 
 
 class AIService:
@@ -195,3 +201,78 @@ class AIService:
             query=query,
             limit=limit,
         )
+
+    def analyze_situation(
+        self,
+        db: Session,
+        situation_id: int,
+        situation_context: dict,
+    ):
+        situation = (
+            db.query(Situation)
+            .filter(
+                Situation.id == situation_id
+            )
+            .first()
+        )
+
+        if situation is None:
+            return None
+
+        try:
+            situation.ai_status = "Processing"
+            db.commit()
+
+            summary = self.summarize_situation(
+                situation_context
+            )
+
+            root_cause = self.analyze_root_cause(
+                situation_context
+            )
+
+            recommendations = self.recommend_actions(
+                situation_context
+            )
+
+            situation.ai_summary = summary
+            situation.ai_root_cause = root_cause
+            situation.ai_recommendations = (
+                recommendations
+            )
+
+            situation.ai_status = "Completed"
+            situation.ai_updated_at = (
+                datetime.now(timezone.utc)
+            )
+
+            db.commit()
+            db.refresh(situation)
+
+            return {
+                "status": "Completed",
+                "situation": situation,
+            }
+
+        except requests.exceptions.ConnectionError:
+            situation.ai_status = "Failed"
+            db.commit()
+            db.refresh(situation)
+
+            return {
+                "status": "Failed",
+                "message": (
+                    "AI analysis failed because the "
+                    "Ollama service is unavailable."
+                ),
+                "situation": situation,
+            }
+
+        except Exception:
+            situation.ai_status = "Failed"
+            db.commit()
+            db.refresh(situation)
+
+            raise
+
+        
