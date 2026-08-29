@@ -1,4 +1,5 @@
 import os
+import time
 
 from app.ai.correlation import HistoricalCorrelation
 from app.ai.service import AIService
@@ -240,10 +241,19 @@ class CorrelationService:
                 correlation_method="rule-based",
             )
 
+            ai_result = None
+
+            if self.is_significant_alert(alert):
+                ai_result = self.trigger_ai_analysis(
+                    db=db,
+                    situation_id=situation.id,
+                )
+
             return {
                 "situation": situation,
                 "score": existing["score"],
                 "reasons": existing["reasons"],
+                "ai_analysis": ai_result,
             }
 
         # Otherwise find related unassigned alerts.
@@ -406,16 +416,58 @@ class CorrelationService:
         if not self.auto_ai_analysis:
             return None
 
-        context = get_situation_context(
-            db,
-            situation_id,
-        )
+        max_attempts = 2
 
-        if context is None:
-            return None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                # Rebuild the context after the alert has
+                # been attached to the situation.
+                context = get_situation_context(
+                    db,
+                    situation_id,
+                )
 
-        return self.ai_service.analyze_situation(
-            db=db,
-            situation_id=situation_id,
-            situation_context=context,
-        )
+                if context is None:
+                    return None
+
+                result = self.ai_service.analyze_situation(
+                    db=db,
+                    situation_id=situation_id,
+                    situation_context=context,
+                )
+
+                return result
+
+            except Exception as exc:
+                print(
+                    f"Automatic AI analysis attempt "
+                    f"{attempt}/{max_attempts} failed: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+
+                if attempt < max_attempts:
+                    time.sleep(2)
+                else:
+                    return {
+                        "status": "Failed",
+                        "message": (
+                            "Automatic AI analysis failed. "
+                            "The Situation was created successfully "
+                            "and can be analyzed manually."
+                        ),
+                    }
+
+        return None
+
+    def is_significant_alert(
+        self,
+        alert: Alert,
+    ) -> bool:
+        severity = (
+            alert.severity or "Medium"
+        ).lower()
+
+        return severity in {
+            "critical",
+            "high",
+        }
