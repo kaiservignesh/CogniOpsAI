@@ -19,6 +19,12 @@ from app.services.situation_service import (
     get_situation_context,
     update_situation,
 )
+from app.schemas.situation import (
+    SituationStatusUpdate,
+)
+from app.services.situation_service import (
+    update_situation_status,
+)
 
 router = APIRouter(
     prefix="/situations",
@@ -118,3 +124,33 @@ def get_situation_context_api(
         )
 
     return context
+
+@router.patch(
+    "/{situation_id}/status",
+    response_model=SituationResponse,
+)
+def change_situation_status(
+    situation_id: int,
+    status_update: SituationStatusUpdate,
+    db: Session = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
+):
+    situation, error = update_situation_status(
+        db,
+        situation_id,
+        status_update.status,
+    )
+
+    if situation is None:
+        if error == "Situation not found":
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error,
+            )
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error,
+        )
+
+    return situation

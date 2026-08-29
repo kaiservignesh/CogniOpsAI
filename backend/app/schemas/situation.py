@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 
@@ -59,3 +60,10 @@ class SituationAlertContext(BaseModel):
 
 class SituationContextResponse(SituationResponse):
     alerts: list[SituationAlertContext]
+
+class SituationStatusUpdate(BaseModel):
+    status: Literal[
+        "Open",
+        "Investigating",
+        "Resolved",
+    ]

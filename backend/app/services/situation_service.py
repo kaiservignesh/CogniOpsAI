@@ -5,6 +5,9 @@ from app.alerts.model import Alert
 from app.schemas.situation import (
     SituationContextResponse,
 )
+from app.situations.lifecycle import (
+    validate_status_transition,
+)
 
 
 def create_situation(
@@ -114,3 +117,35 @@ def get_situation_context(
             for alert in alerts
         ],
     }
+
+def update_situation_status(
+    db: Session,
+    situation_id: int,
+    new_status: str,
+):
+    situation = get_situation_by_id(
+        db,
+        situation_id,
+    )
+
+    if situation is None:
+        return None, "Situation not found"
+
+    if not validate_status_transition(
+        situation.status,
+        new_status,
+    ):
+        return (
+            None,
+            (
+                f"Invalid status transition: "
+                f"{situation.status} → {new_status}"
+            ),
+        )
+
+    situation.status = new_status
+
+    db.commit()
+    db.refresh(situation)
+
+    return situation, None
