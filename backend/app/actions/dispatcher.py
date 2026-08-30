@@ -1,3 +1,4 @@
+from app.actions.email import EmailActionAdapter
 from app.actions.mock import MockActionAdapter
 
 
@@ -6,6 +7,7 @@ class ActionDispatcher:
         self.adapters = {
             "mock": MockActionAdapter(),
             "notification": MockActionAdapter(),
+            "email": EmailActionAdapter(),
         }
 
     def dispatch(
