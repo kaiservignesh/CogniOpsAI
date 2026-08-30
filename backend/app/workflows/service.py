@@ -111,6 +111,23 @@ class WorkflowPolicyService:
         situation: Situation,
         policy: WorkflowPolicy,
     ):
+        existing_execution = (
+            db.query(WorkflowExecution)
+            .filter(
+                WorkflowExecution.situation_id
+                == situation.id,
+                WorkflowExecution.policy_id
+                == policy.id,
+            )
+            .order_by(
+                WorkflowExecution.created_at.desc()
+            )
+            .first()
+        )
+
+        if existing_execution is not None:
+            return existing_execution
+
         action = policy.action or {}
 
         execution = WorkflowExecution(
@@ -127,29 +144,6 @@ class WorkflowPolicyService:
         db.refresh(execution)
 
         return execution
-
-    def evaluate_and_create_executions(
-        self,
-        db: Session,
-        situation: Situation,
-    ):
-        matched_policies = self.evaluate_policies(
-            db,
-            situation,
-        )
-
-        executions = []
-
-        for policy in matched_policies:
-            execution = self.create_execution(
-                db,
-                situation,
-                policy,
-            )
-
-            executions.append(execution)
-
-        return executions
 
     def execute_workflow(
         self,
@@ -197,3 +191,26 @@ class WorkflowPolicyService:
             db.refresh(execution)
 
             return execution
+
+    def evaluate_and_create_executions(
+        self,
+        db: Session,
+        situation: Situation,
+    ):
+        matched_policies = self.evaluate_policies(
+            db,
+            situation,
+        )
+
+        executions = []
+
+        for policy in matched_policies:
+            execution = self.create_execution(
+                db,
+                situation,
+                policy,
+            )
+
+            executions.append(execution)
+
+        return executions
