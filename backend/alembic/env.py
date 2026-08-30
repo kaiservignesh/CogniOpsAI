@@ -8,6 +8,8 @@ from app.models.situation import Situation
 from app.models.user import User
 from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
+from app.workflows.model import WorkflowPolicy
+from app.workflows.execution import WorkflowExecution
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

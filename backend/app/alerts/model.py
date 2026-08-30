@@ -1,6 +1,5 @@
 from datetime import datetime
-from app.models.situation import Situation
-
+    
 from app.database.database import Base
 from sqlalchemy import (
     Column,

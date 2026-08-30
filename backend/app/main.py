@@ -7,7 +7,12 @@ from app.core.logger import logger
 from app.integrations.router import router as integration_router
 from app.api.correlation import router as correlation_router
 from app.api.ai import router as ai_router
+from app.api.workflow import router as workflow_router
+from app.alerts.model import Alert
+from app.models.situation import Situation
+from app.models.user import User
 from fastapi import FastAPI
+
 
 logger.info("CogniOps AI started successfully")
 
@@ -33,3 +38,4 @@ app.include_router(integration_router)
 app.include_router(situation_router)
 app.include_router(correlation_router)
 app.include_router(ai_router)
+app.include_router(workflow_router)
