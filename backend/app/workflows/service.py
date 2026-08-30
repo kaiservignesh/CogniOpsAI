@@ -3,9 +3,14 @@ from app.workflows.execution import WorkflowExecution
 from app.workflows.model import WorkflowPolicy
 from app.workflows.rules import evaluate_condition
 from sqlalchemy.orm import Session
+from app.actions.dispatcher import ActionDispatcher
 
 
 class WorkflowPolicyService:
+    
+    def __init__(self):
+        self.dispatcher = ActionDispatcher()
+
     def create_policy(
         self,
         db: Session,
@@ -145,3 +150,50 @@ class WorkflowPolicyService:
             executions.append(execution)
 
         return executions
+
+    def execute_workflow(
+        self,
+        db: Session,
+        execution_id: int,
+    ):
+        execution = (
+            db.query(WorkflowExecution)
+            .filter(
+                WorkflowExecution.id
+                == execution_id
+            )
+            .first()
+        )
+
+        if execution is None:
+            return None
+
+        if execution.status != "Pending":
+            return execution
+
+        try:
+            execution.status = "Running"
+            db.commit()
+            db.refresh(execution)
+
+            result = self.dispatcher.dispatch(
+                action_type=execution.action_type,
+                payload=execution.action_payload or {},
+            )
+
+            execution.status = "Success"
+            execution.result = result
+
+            db.commit()
+            db.refresh(execution)
+
+            return execution
+
+        except Exception as exc:
+            execution.status = "Failed"
+            execution.result = str(exc)
+
+            db.commit()
+            db.refresh(execution)
+
+            return execution

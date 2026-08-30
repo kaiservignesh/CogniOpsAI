@@ -13,6 +13,7 @@ from app.workflows.service import WorkflowPolicyService
 from app.workflows.execution import WorkflowExecution
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from app.workflows.execution import WorkflowExecution
 
 
 router = APIRouter(
@@ -120,3 +121,27 @@ def get_executions(
         )
         .all()
     )
+
+@router.post(
+    "/executions/{execution_id}/run",
+    response_model=WorkflowExecutionResponse,
+)
+def run_execution(
+    execution_id: int,
+    db: Session = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
+):
+    service = WorkflowPolicyService()
+
+    execution = service.execute_workflow(
+        db,
+        execution_id,
+    )
+
+    if execution is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workflow execution not found",
+        )
+
+    return execution
