@@ -17,6 +17,10 @@ const menuItems = [
     label: "Executions",
     path: "/workflow-executions",
   },
+  // {
+  //   label: "Workflow Builder",
+  //   path: "/workflow-builder",
+  // },
 ];
 
 export default function Sidebar() {
