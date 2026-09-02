@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+
 import {
   Alert as MuiAlert,
   Box,
@@ -16,13 +22,21 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
-import { useNavigate, useParams } from "react-router-dom";
+
+import {
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 
 import {
   analyzeSituation,
   getSituationContext,
   updateSituationStatus,
 } from "../api/situations";
+
+import {
+  getWorkflowExecutions,
+} from "../api/workflows";
 
 export default function SituationDetails() {
   const { id } = useParams<{ id: string }>();
@@ -66,6 +80,7 @@ export default function SituationDetails() {
       });
     },
   });
+  
 
   const aiMutation = useMutation({
     mutationFn: () =>
@@ -80,6 +95,19 @@ export default function SituationDetails() {
       });
     },
   });
+
+  const {
+    data: executions = [],
+  } = useQuery({
+    queryKey: ["workflow-executions"],
+    queryFn: getWorkflowExecutions,
+  });
+
+  const situationExecutions = Array.isArray(executions)
+    ? executions.filter(
+        (execution) => execution.situation_id === situationId
+      )
+    : [];
 
   if (!Number.isFinite(situationId)) {
     return (
@@ -115,6 +143,7 @@ export default function SituationDetails() {
 
     statusMutation.mutate(selectedStatus);
   };
+
 
   return (
     <Box>
@@ -607,7 +636,93 @@ export default function SituationDetails() {
             )}
           </CardContent>
         </Card>
+            
+        <Card>
+          <CardContent>
+            <Typography
+              variant="h6"
+              fontWeight={700}
+              gutterBottom
+            >
+              Workflow Executions
+            </Typography>
+
+            {situationExecutions.length === 0 ? (
+              <Typography color="text.secondary">
+                No workflow executions for this Situation.
+              </Typography>
+            ) : (
+              <Stack spacing={2}>
+                {situationExecutions.map(
+                  (execution) => (
+                    <Box key={execution.id}>
+                      <Stack
+                        direction={{
+                          xs: "column",
+                          sm: "row",
+                        }}
+                        justifyContent="space-between"
+                        spacing={2}
+                      >
+                        <Box>
+                          <Typography fontWeight={600}>
+                            Execution #{execution.id}
+                          </Typography>
+
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                          >
+                            Policy #{execution.policy_id}
+                            {" · "}
+                            {execution.action_type ??
+                              "Unknown"}
+                            {" · "}
+                            {execution.action_target ??
+                              "—"}
+                          </Typography>
+                        </Box>
+
+                        <Chip
+                          label={execution.status}
+                          size="small"
+                          color={
+                            execution.status ===
+                            "Success"
+                              ? "success"
+                              : execution.status ===
+                                "Failed"
+                                ? "error"
+                                : "default"
+                          }
+                        />
+                      </Stack>
+
+                      {execution.result && (
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{
+                            mt: 1,
+                            whiteSpace: "pre-wrap",
+                          }}
+                        >
+                          {execution.result}
+                        </Typography>
+                      )}
+
+                      <Divider sx={{ mt: 2 }} />
+                    </Box>
+                  ),
+                )}
+              </Stack>
+            )}
+          </CardContent>
+        </Card>
+        
+
       </Stack>
+      
     </Box>
   );
 }
