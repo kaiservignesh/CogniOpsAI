@@ -102,7 +102,31 @@ def get_situation_context(
         "environment": situation.environment,
         "created_at": situation.created_at,
         "updated_at": situation.updated_at,
+
+        # Alert information
         "alert_count": len(alerts),
+
+        # Correlation information
+        "correlation_score": (
+            situation.correlation_score
+        ),
+        "correlation_method": (
+            situation.correlation_method
+        ),
+        "correlation_reasons": (
+            situation.correlation_reasons
+        ),
+
+        # AI information
+        "ai_summary": situation.ai_summary,
+        "ai_root_cause": situation.ai_root_cause,
+        "ai_recommendations": (
+            situation.ai_recommendations
+        ),
+        "ai_status": situation.ai_status,
+        "ai_updated_at": situation.ai_updated_at,
+
+        # Related alerts
         "alerts": [
             {
                 "id": alert.id,
