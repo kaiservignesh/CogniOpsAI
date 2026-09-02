@@ -7,6 +7,11 @@ const apiClient = axios.create({
   },
 });
 
+export const logout = () => {
+  localStorage.removeItem("access_token");
+  window.location.href = "/login";
+};
+
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem("access_token");
 

@@ -1,5 +1,6 @@
 import {
   Box,
+  Button,
   Divider,
   List,
   ListItemButton,
@@ -7,6 +8,8 @@ import {
   Toolbar,
 } from "@mui/material";
 import { Link } from "react-router-dom";
+
+import { logout } from "../../api/client";
 
 const menuItems = [
   { label: "Dashboard", path: "/" },
@@ -49,6 +52,16 @@ export default function Sidebar() {
           </ListItemButton>
         ))}
       </List>
+
+      <Button
+        fullWidth
+        variant="outlined"
+        color="error"
+        onClick={logout}
+        sx={{ mt: 2 }}
+      >
+        Logout
+      </Button>
     </Box>
   );
 }
