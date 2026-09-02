@@ -3,6 +3,9 @@ from app.actions.mock import MockActionAdapter
 from app.actions.servicenow import (
     ServiceNowActionAdapter,
 )
+from app.actions.xmatters import (
+    XMattersActionAdapter,
+)
 
 
 class ActionDispatcher:
@@ -12,6 +15,7 @@ class ActionDispatcher:
             "notification": MockActionAdapter(),
             "email": EmailActionAdapter(),
             "servicenow": ServiceNowActionAdapter(),
+            "xmatters": XMattersActionAdapter(),
         }
 
     def dispatch(
