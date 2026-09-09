@@ -8,6 +8,7 @@ from app.correlation.engine import CorrelationEngine
 from app.models.situation import Situation
 from app.services.situation_service import get_situation_context
 from sqlalchemy.orm import Session
+from app.workflows.service import WorkflowPolicyService
 
 
 class CorrelationService:
@@ -15,6 +16,7 @@ class CorrelationService:
         self.engine = CorrelationEngine()
         self.historical = HistoricalCorrelation()
         self.ai_service = AIService()
+        self.workflow_service = WorkflowPolicyService()
 
         self.auto_ai_analysis = (
             os.getenv(
@@ -249,11 +251,17 @@ class CorrelationService:
                     situation_id=situation.id,
                 )
 
+            workflow_results = self.trigger_workflows(
+                db=db,
+                situation=situation,
+            )
+
             return {
                 "situation": situation,
                 "score": existing["score"],
                 "reasons": existing["reasons"],
                 "ai_analysis": ai_result,
+                "workflow_executions": workflow_results,
             }
 
         # Otherwise find related unassigned alerts.
@@ -262,8 +270,41 @@ class CorrelationService:
             alert,
         )
 
+        # No related alerts means this is the first alert
+        # for a new incident. Create a new Situation anyway.
         if not related_alerts:
-            return None
+            situation = self.create_situation_from_alerts(
+                db=db,
+                alert=alert,
+                related_alerts=[],
+                correlation_score=0.0,
+                correlation_method="rule-based",
+                correlation_reasons=[
+                    "No related alerts found",
+                    "New Situation created from standalone alert",
+                ],
+            )
+
+            ai_result = self.trigger_ai_analysis(
+                db=db,
+                situation_id=situation.id,
+            )
+
+            workflow_results = self.trigger_workflows(
+                db=db,
+                situation=situation,
+            )
+
+            return {
+                "situation": situation,
+                "score": 0.0,
+                "reasons": [
+                    "No related alerts found",
+                    "New Situation created from standalone alert",
+                ],
+                "ai_analysis": ai_result,
+                "workflow_executions": workflow_results,
+            }
 
         hybrid_result = (
             self.hybrid_correlation_analysis(
@@ -295,11 +336,17 @@ class CorrelationService:
             situation_id=situation.id,
         )
 
+        workflow_results = self.trigger_workflows(
+            db=db,
+            situation=situation,
+        )
+
         return {
             "situation": situation,
             "score": hybrid_result["hybrid_score"],
             "reasons": hybrid_result["reasons"],
             "ai_analysis": ai_result,
+            "workflow_executions": workflow_results,
         }
 
     def update_situation_severity(
@@ -471,3 +518,40 @@ class CorrelationService:
             "critical",
             "high",
         }
+
+    def trigger_workflows(
+        self,
+        db: Session,
+        situation: Situation,
+    ):
+        try:
+            executions = (
+                self.workflow_service
+                .evaluate_and_create_executions(
+                    db=db,
+                    situation=situation,
+                )
+            )
+
+            results = []
+
+            for execution in executions:
+                executed = (
+                    self.workflow_service
+                    .execute_workflow(
+                        db=db,
+                        execution_id=execution.id,
+                    )
+                )
+
+                results.append(executed)
+
+            return results
+
+        except Exception as exc:
+            print(
+                f"Automatic workflow execution failed "
+                f"for situation {situation.id}: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            return []
