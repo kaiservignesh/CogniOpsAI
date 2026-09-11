@@ -1,4 +1,4 @@
-import apiClient from "./client";
+/*import apiClient from "./client";
 
 export interface LoginRequest {
   username: string;
@@ -19,4 +19,27 @@ export async function login(
   );
 
   return response.data;
+}*/
+
+import apiClient from "./client";
+
+export interface LoginRequest {
+  username: string;
+  password: string;
 }
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+}
+
+export const login = async (
+  credentials: LoginRequest,
+): Promise<LoginResponse> => {
+  const response = await apiClient.post<LoginResponse>(
+    "/auth/login",
+    credentials,
+  );
+
+  return response.data;
+};
