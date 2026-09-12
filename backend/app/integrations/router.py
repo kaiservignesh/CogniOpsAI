@@ -1,17 +1,52 @@
+import os
+
+from app.alerts.service import create_alert
 from app.auth.dependencies import get_current_user
 from app.database.database import get_db
 from app.integrations.grafana.service import GrafanaService
 from app.integrations.loki.service import LokiService
+from app.integrations.newrelic.adapter import NewRelicAdapter
 from app.integrations.newrelic.service import NewRelicService
 from app.models.user import User
-from fastapi import APIRouter, Depends
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Request,
+    BackgroundTasks,
+)
 from sqlalchemy.orm import Session
+from app.alerts.model import Alert
 
 router = APIRouter(
     prefix="/integrations",
     tags=["Integrations"],
 )
 
+def process_newrelic_alert(alert_id: int):
+    from app.database.database import SessionLocal
+    from app.correlation.service import CorrelationService
+
+    db = SessionLocal()
+
+    try:
+        correlation_service = CorrelationService()
+
+        correlation_service.correlate_alert(
+            db=db,
+            alert_id=alert_id,
+        )
+
+    except Exception as exc:
+        print(
+            f"Background New Relic processing failed "
+            f"for alert {alert_id}: "
+            f"{type(exc).__name__}: {exc}"
+        )
+
+    finally:
+        db.close()
 
 @router.post("/newrelic/ingest")
 def ingest_newrelic(
@@ -64,4 +99,73 @@ def ingest_loki(
         "source": "Loki",
         "count": len(alerts),
         "alerts": alerts,
+    }
+
+@router.post("/newrelic/webhook")
+async def newrelic_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),  # noqa: B008
+    authorization: str | None = Header(default=None),
+):
+    expected_token = os.getenv("NEW_RELIC_WEBHOOK_TOKEN")
+
+    if not expected_token:
+        raise HTTPException(
+            status_code=500,
+            detail="NEW_RELIC_WEBHOOK_TOKEN is not configured",
+        )
+
+    if authorization != f"Bearer {expected_token}":
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid webhook token",
+        )
+
+    payload = await request.json()
+
+    # Prevent duplicate New Relic issues
+    issue_id = (
+        payload.get("issue_id")
+        or payload.get("issueId")
+    )
+
+    if issue_id:
+        existing_alert = (
+            db.query(Alert)
+            .filter(
+                Alert.source == "New Relic",
+                Alert.tags.contains(
+                    f"issue:{issue_id}"
+                ),
+            )
+            .first()
+        )
+
+        if existing_alert:
+            return {
+                "source": "New Relic",
+                "status": "duplicate_ignored",
+                "alert_id": existing_alert.id,
+            }
+
+    alert_data = NewRelicAdapter.normalize_webhook(
+        payload
+    )
+
+    alert = create_alert(
+        db=db,
+        alert=alert_data,
+        auto_process=False,
+    )
+
+    background_tasks.add_task(
+        process_newrelic_alert,
+        alert.id,
+    )
+
+    return {
+        "source": "New Relic",
+        "status": "accepted",
+        "alert_id": alert.id,
     }

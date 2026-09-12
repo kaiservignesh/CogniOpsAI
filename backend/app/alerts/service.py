@@ -10,7 +10,11 @@ from app.correlation.service import CorrelationService
 correlation_service = CorrelationService()
 
 
-def create_alert(db: Session, alert: AlertCreate):
+def create_alert(
+    db: Session,
+    alert: AlertCreate,
+    auto_process: bool = True,
+):
     db_alert = Alert(**alert.model_dump())
 
     db.add(db_alert)
@@ -20,16 +24,17 @@ def create_alert(db: Session, alert: AlertCreate):
     # Automatically correlate the newly created alert.
     # A failure in correlation should not prevent the alert
     # itself from being successfully created.
-    try:
-        correlation_service.correlate_alert(
-            db=db,
-            alert_id=db_alert.id,
-        )
-    except Exception as exc:
-        print(
-            f"Automatic correlation failed for alert "
-            f"{db_alert.id}: {type(exc).__name__}: {exc}"
-        )
+    if auto_process:
+        try:
+            correlation_service.correlate_alert(
+                db=db,
+                alert_id=db_alert.id,
+            )
+        except Exception as exc:
+            print(
+                f"Automatic correlation failed for alert "
+                f"{db_alert.id}: {type(exc).__name__}: {exc}"
+            )
 
     # Refresh again because correlation may have assigned
     # a situation_id to the alert.
