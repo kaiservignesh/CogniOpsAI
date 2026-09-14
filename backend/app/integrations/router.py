@@ -7,6 +7,7 @@ from app.integrations.grafana.service import GrafanaService
 from app.integrations.loki.service import LokiService
 from app.integrations.newrelic.adapter import NewRelicAdapter
 from app.integrations.newrelic.service import NewRelicService
+from app.integrations.grafana.adapter import GrafanaAdapter
 from app.models.user import User
 from fastapi import (
     APIRouter,
@@ -41,6 +42,31 @@ def process_newrelic_alert(alert_id: int):
     except Exception as exc:
         print(
             f"Background New Relic processing failed "
+            f"for alert {alert_id}: "
+            f"{type(exc).__name__}: {exc}"
+        )
+
+    finally:
+        db.close()
+
+
+def process_grafana_alert(alert_id: int):
+    from app.correlation.service import CorrelationService
+    from app.database.database import SessionLocal
+
+    db = SessionLocal()
+
+    try:
+        correlation_service = CorrelationService()
+
+        correlation_service.correlate_alert(
+            db=db,
+            alert_id=alert_id,
+        )
+
+    except Exception as exc:
+        print(
+            f"Background Grafana processing failed "
             f"for alert {alert_id}: "
             f"{type(exc).__name__}: {exc}"
         )
@@ -168,4 +194,77 @@ async def newrelic_webhook(
         "source": "New Relic",
         "status": "accepted",
         "alert_id": alert.id,
+    }
+
+@router.post("/grafana/webhook")
+async def grafana_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),  # noqa: B008
+    authorization: str | None = Header(default=None),
+):
+    expected_token = os.getenv("GRAFANA_WEBHOOK_TOKEN")
+
+    if not expected_token:
+        raise HTTPException(
+            status_code=500,
+            detail="GRAFANA_WEBHOOK_TOKEN is not configured",
+        )
+
+    if authorization != f"Bearer {expected_token}":
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid webhook token",
+        )
+
+    payload = await request.json()
+
+    print("=== GRAFANA WEBHOOK RECEIVED ===")
+    print(payload)
+
+    if "alerts" in payload and isinstance(payload["alerts"], list):
+        alerts = payload["alerts"]
+    else:
+        alerts = [payload]
+
+    accepted_alerts = []
+
+    for grafana_alert in alerts:
+        alert_data = GrafanaAdapter.normalize_webhook_alert(
+            grafana_alert
+        )
+
+        alert = create_alert(
+            db=db,
+            alert=alert_data,
+            auto_process=False,
+        )
+
+        print(
+            f"Grafana alert created: "
+            f"id={alert.id}, "
+            f"title={alert.title}, "
+            f"source={alert.source}, "
+            f"severity={alert.severity}, "
+            f"policy_name={alert.policy_name}, "
+            f"tags={alert.tags}"
+        )
+
+        background_tasks.add_task(
+            process_grafana_alert,
+            alert.id,
+        )
+
+        accepted_alerts.append(
+            {
+                "status": "accepted",
+                "alert_id": alert.id,
+            }
+        )
+
+    return {
+        "source": "Grafana",
+        "status": "accepted",
+        "count": len(accepted_alerts),
+        "alerts": accepted_alerts,
     }

@@ -30,6 +30,7 @@ export default function Alerts() {
   } = useQuery({
     queryKey: ["alerts"],
     queryFn: getAlerts,
+    refetchInterval: 5000,
   });
 
   const [severityFilter, setSeverityFilter] =

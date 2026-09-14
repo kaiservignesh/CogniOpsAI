@@ -105,3 +105,21 @@ def should_correlate(alert_1, alert_2) -> bool:
         return True
 
     return False
+
+def same_issue(alert_1, alert_2) -> bool:
+    if not alert_1.tags or not alert_2.tags:
+        return False
+
+    tags_1 = {
+        tag.strip()
+        for tag in alert_1.tags.split(",")
+        if tag.strip().lower().startswith("issue:")
+    }
+
+    tags_2 = {
+        tag.strip()
+        for tag in alert_2.tags.split(",")
+        if tag.strip().lower().startswith("issue:")
+    }
+
+    return bool(tags_1.intersection(tags_2))

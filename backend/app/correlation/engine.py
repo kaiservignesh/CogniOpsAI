@@ -1,6 +1,7 @@
 from app.correlation.rules import (
     overlapping_tags,
     same_environment,
+    same_issue,
     same_policy,
     same_service,
     within_time_window,
@@ -45,6 +46,9 @@ class CorrelationEngine:
 
         if within_time_window(alert_1, alert_2):
             score += 5
+
+        if same_issue(alert_1, alert_2):
+            score += 50
 
         return score
 

@@ -38,6 +38,7 @@ class AlertResponse(BaseModel):
     tags: Optional[str]
     service: Optional[str]
     environment: Optional[str]
+    situation_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
 
