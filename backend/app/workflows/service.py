@@ -1,15 +1,22 @@
+from app.actions.dispatcher import ActionDispatcher
 from app.models.situation import Situation
+from app.workflows.email_formatter import (
+    build_situation_email,
+)
 from app.workflows.execution import WorkflowExecution
 from app.workflows.model import WorkflowPolicy
 from app.workflows.rules import evaluate_condition
 from sqlalchemy.orm import Session
-from app.actions.dispatcher import ActionDispatcher
 
 
 class WorkflowPolicyService:
-    
+
     def __init__(self):
         self.dispatcher = ActionDispatcher()
+
+    # =========================================================
+    # Policy CRUD
+    # =========================================================
 
     def create_policy(
         self,
@@ -81,6 +88,10 @@ class WorkflowPolicyService:
 
         return policy
 
+    # =========================================================
+    # Policy evaluation
+    # =========================================================
+
     def evaluate_policies(
         self,
         db: Session,
@@ -101,9 +112,15 @@ class WorkflowPolicyService:
                 situation,
                 policy.condition,
             ):
-                matched_policies.append(policy)
+                matched_policies.append(
+                    policy
+                )
 
         return matched_policies
+
+    # =========================================================
+    # Execution creation
+    # =========================================================
 
     def create_execution(
         self,
@@ -145,6 +162,10 @@ class WorkflowPolicyService:
 
         return execution
 
+    # =========================================================
+    # Workflow execution
+    # =========================================================
+
     def execute_workflow(
         self,
         db: Session,
@@ -166,14 +187,99 @@ class WorkflowPolicyService:
             return execution
 
         try:
+            # -------------------------------------------------
+            # Load Situation
+            # -------------------------------------------------
+
+            situation = (
+                db.query(Situation)
+                .filter(
+                    Situation.id
+                    == execution.situation_id
+                )
+                .first()
+            )
+
+            if situation is None:
+                raise ValueError(
+                    "Situation not found for workflow execution"
+                )
+
+            # -------------------------------------------------
+            # Refresh Situation from database
+            # -------------------------------------------------
+
+            db.refresh(situation)
+
+            # -------------------------------------------------
+            # Mark execution as Running
+            # -------------------------------------------------
+
             execution.status = "Running"
+
             db.commit()
             db.refresh(execution)
 
+            # -------------------------------------------------
+            # Copy action payload
+            # -------------------------------------------------
+
+            action_payload = dict(
+                execution.action_payload
+                or {}
+            )
+
+            # -------------------------------------------------
+            # Dynamic email body
+            # -------------------------------------------------
+
+            if (
+                execution.action_type
+                and execution.action_type.lower()
+                == "email"
+            ):
+                custom_message = (
+                    action_payload.get(
+                        "body"
+                    )
+                )
+
+                action_payload["body"] = (
+                    build_situation_email(
+                        situation=situation,
+                        execution=execution,
+                        custom_message=custom_message,
+                    )
+                )
+
+                # Save the generated email body
+                # into workflow execution.
+                execution.action_payload = (
+                    action_payload
+                )
+
+                db.commit()
+                db.refresh(execution)
+
+                print(
+                    f"CogniOpsAI email generated "
+                    f"for Situation {situation.id}: "
+                    f"AI status="
+                    f"{situation.ai_status}"
+                )
+
+            # -------------------------------------------------
+            # Dispatch action
+            # -------------------------------------------------
+
             result = self.dispatcher.dispatch(
                 action_type=execution.action_type,
-                payload=execution.action_payload or {},
+                payload=action_payload,
             )
+
+            # -------------------------------------------------
+            # Mark success
+            # -------------------------------------------------
 
             execution.status = "Success"
             execution.result = result
@@ -190,16 +296,28 @@ class WorkflowPolicyService:
             db.commit()
             db.refresh(execution)
 
+            print(
+                f"Workflow execution "
+                f"{execution.id} failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
+
             return execution
+
+    # =========================================================
+    # Evaluate + create executions
+    # =========================================================
 
     def evaluate_and_create_executions(
         self,
         db: Session,
         situation: Situation,
     ):
-        matched_policies = self.evaluate_policies(
-            db,
-            situation,
+        matched_policies = (
+            self.evaluate_policies(
+                db,
+                situation,
+            )
         )
 
         executions = []

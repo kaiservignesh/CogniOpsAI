@@ -52,10 +52,10 @@ export default function App() {
               element={<WorkflowExecutions />}
             />
 
-            {/* <Route
+            <Route
               path="/workflow-builder"
               element={<WorkflowBuilder />}
-            /> */}
+            />
           </Route>
         </Route>
       </Routes>

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link as RouterLink } from "react-router-dom";
 import {
   useMutation,
   useQuery,
@@ -274,12 +275,21 @@ export default function Workflows() {
           </Typography>
         </Box>
 
-        <Button
-          variant="contained"
-          onClick={openCreate}
-        >
-          Create Policy
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <Button
+            component={RouterLink}
+            to="/workflow-builder"
+            variant="outlined"
+          >
+            Visual Builder
+          </Button>
+          <Button
+            variant="contained"
+            onClick={openCreate}
+          >
+            Create Policy
+          </Button>
+        </Stack>
       </Stack>
 
       {createMutation.isError && (

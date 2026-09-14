@@ -10,6 +10,11 @@ class GrafanaAdapter:
             "Alert received from Grafana",
         )
         severity = data.get("severity", "Medium")
+
+        service = data.get("service","N/A")
+        
+        environment = data.get("environment","N/A")
+
         policy_name = data.get("rule", data.get("name"))
 
         labels = data.get("labels", {})
@@ -23,6 +28,8 @@ class GrafanaAdapter:
             description=description,
             source="Grafana",
             severity=severity,
+            service=service,
+            environment=environment,
             policy_name=policy_name,
             tags=tags or None,
         )
@@ -44,6 +51,18 @@ class GrafanaAdapter:
             data.get("priority")
             or data.get("severity")
             or "Medium"
+        )
+
+        service = (
+            data.get("service")
+            or data.get("application")
+            or "N/A"
+        )
+
+        environment = (
+            data.get("environment")
+            or data.get("environment_name")
+            or "N/A"
         )
 
         policy_name = (
@@ -79,6 +98,8 @@ class GrafanaAdapter:
             description=description,
             source="Grafana",
             severity=severity,
+            service=service,
+            environment=environment,
             policy_name=policy_name,
             tags=tags or None,
         )

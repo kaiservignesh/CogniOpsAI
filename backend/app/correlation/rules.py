@@ -25,6 +25,25 @@ def same_policy(alert_1, alert_2) -> bool:
     return alert_1.policy_name == alert_2.policy_name
 
 
+def same_issue(alert_1, alert_2) -> bool:
+    if not alert_1.tags or not alert_2.tags:
+        return False
+
+    tags_1 = {
+        tag.strip().lower()
+        for tag in alert_1.tags.split(",")
+        if tag.strip().lower().startswith("issue:")
+    }
+
+    tags_2 = {
+        tag.strip().lower()
+        for tag in alert_2.tags.split(",")
+        if tag.strip().lower().startswith("issue:")
+    }
+
+    return bool(tags_1.intersection(tags_2))
+
+
 def overlapping_tags(alert_1, alert_2) -> bool:
     if not alert_1.tags or not alert_2.tags:
         return False
@@ -64,62 +83,25 @@ def within_time_window(alert_1, alert_2) -> bool:
 def should_correlate(alert_1, alert_2) -> bool:
     """
     Determine whether two alerts are likely related.
+
+    Service and environment provide context, but they are not
+    sufficient by themselves to merge unrelated alert types.
     """
 
     if not within_time_window(alert_1, alert_2):
         return False
 
-    service_match = same_service(
-        alert_1,
-        alert_2,
-    )
-
-    environment_match = same_environment(
-        alert_1,
-        alert_2,
-    )
-
-    policy_match = same_policy(
-        alert_1,
-        alert_2,
-    )
-
-    tag_match = overlapping_tags(
-        alert_1,
-        alert_2,
-    )
-
-    # Strong correlation:
-    # same service + same environment
-    if service_match and environment_match:
+    if same_issue(alert_1, alert_2):
         return True
 
-    # Alternative correlation:
-    # same service + matching policy
-    if service_match and policy_match:
+    if same_policy(alert_1, alert_2) and same_service(
+        alert_1, alert_2
+    ):
         return True
 
-    # Alternative correlation:
-    # same service + overlapping tags
-    if service_match and tag_match:
+    if same_policy(alert_1, alert_2) and same_environment(
+        alert_1, alert_2
+    ):
         return True
 
     return False
-
-def same_issue(alert_1, alert_2) -> bool:
-    if not alert_1.tags or not alert_2.tags:
-        return False
-
-    tags_1 = {
-        tag.strip()
-        for tag in alert_1.tags.split(",")
-        if tag.strip().lower().startswith("issue:")
-    }
-
-    tags_2 = {
-        tag.strip()
-        for tag in alert_2.tags.split(",")
-        if tag.strip().lower().startswith("issue:")
-    }
-
-    return bool(tags_1.intersection(tags_2))

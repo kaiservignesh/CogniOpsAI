@@ -12,14 +12,17 @@ class CorrelationEngine:
     def get_reasons(self, alert_1, alert_2) -> list[str]:
         reasons = []
 
+        if same_issue(alert_1, alert_2):
+            reasons.append("Same issue")
+
+        if same_policy(alert_1, alert_2):
+            reasons.append("Same policy")
+
         if same_service(alert_1, alert_2):
             reasons.append("Same service")
 
         if same_environment(alert_1, alert_2):
             reasons.append("Same environment")
-
-        if same_policy(alert_1, alert_2):
-            reasons.append("Same policy")
 
         if overlapping_tags(alert_1, alert_2):
             reasons.append("Overlapping tags")
@@ -30,25 +33,33 @@ class CorrelationEngine:
         return reasons
 
     def calculate_score(self, alert_1, alert_2) -> int:
+        """
+        Calculate a correlation score.
+
+        Matching service/environment is contextual evidence, not a
+        standalone reason to merge unrelated alert types. A common
+        issue or common policy carries more weight.
+        """
+
         score = 0
-
-        if same_service(alert_1, alert_2):
-            score += 40
-
-        if same_environment(alert_1, alert_2):
-            score += 25
-
-        if same_policy(alert_1, alert_2):
-            score += 20
-
-        if overlapping_tags(alert_1, alert_2):
-            score += 10
-
-        if within_time_window(alert_1, alert_2):
-            score += 5
 
         if same_issue(alert_1, alert_2):
             score += 50
+
+        if same_policy(alert_1, alert_2):
+            score += 35
+
+        if same_service(alert_1, alert_2):
+            score += 20
+
+        if same_environment(alert_1, alert_2):
+            score += 10
+
+        if overlapping_tags(alert_1, alert_2):
+            score += 5
+
+        if within_time_window(alert_1, alert_2):
+            score += 5
 
         return score
 

@@ -21,6 +21,16 @@ class NewRelicAdapter:
             "Medium",
         )
 
+        service = violation.get(
+            "service",
+            "N/A",
+        )
+
+        environment = violation.get(
+            "environment",
+            "N/A",
+        )
+
         policy_name = violation.get("policy_name")
 
         entity_name = violation.get(
@@ -33,6 +43,8 @@ class NewRelicAdapter:
             description=description,
             source="New Relic",
             severity=severity,
+            service=service,
+            environment=environment,
             policy_name=policy_name,
             tags=f"entity:{entity_name}",
         )
@@ -66,6 +78,18 @@ class NewRelicAdapter:
             or "Medium"
         )
 
+        service = (
+            data.get("service")
+            or data.get("application")
+            or "N/A"
+        )
+
+        environment = (
+            data.get("environment")
+            or data.get("environment_name")
+            or "N/A"
+        )
+
         policy_name = (
             data.get("policy_name")
             or data.get("condition_name")
@@ -84,6 +108,17 @@ class NewRelicAdapter:
             f"entity:{entity}",
         ]
 
+        # raw_tags = data.get("tags", {})
+        
+        # if isinstance(raw_tags, dict):
+        #     tags = [
+        #         f"{key}:{value}"
+        #         for key, value in raw_tags.items()
+        #         if value
+        #     ]
+        # else:
+        #     tags = []
+
         if issue_id:
             tags.append(f"issue:{issue_id}")
 
@@ -92,6 +127,8 @@ class NewRelicAdapter:
             description=description,
             source="New Relic",
             severity=severity,
+            service=service,
+            environment=environment,
             policy_name=policy_name,
             tags=",".join(tags),
         )
