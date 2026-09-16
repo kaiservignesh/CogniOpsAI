@@ -77,3 +77,101 @@ export async function getWorkflowExecutions(): Promise<
 
   return response.data;
 }
+
+export interface CorrelationRule {
+  field: string;
+  operator: string;
+  value: string;
+}
+
+export interface CorrelationCondition {
+  match: "all" | "any";
+  rules: CorrelationRule[];
+}
+
+export interface CorrelationPolicy {
+  id?: number;
+  name: string;
+  description?: string | null;
+  enabled: boolean;
+  condition: CorrelationCondition;
+  time_window_minutes: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CorrelationPolicyCreate {
+  name: string;
+  description?: string | null;
+  enabled?: boolean;
+  condition: CorrelationCondition;
+  time_window_minutes?: number;
+}
+
+export interface CorrelationPolicyUpdate {
+  name?: string;
+  description?: string | null;
+  enabled?: boolean;
+  condition?: CorrelationCondition;
+  time_window_minutes?: number;
+}
+
+export async function getCorrelationPolicies(): Promise<
+  CorrelationPolicy[]
+> {
+  const response = await apiClient.get(
+    "/correlation-policies/"
+  );
+
+  return response.data;
+}
+
+export async function getCorrelationPolicy(
+  id: number
+): Promise<CorrelationPolicy> {
+  const response = await apiClient.get(
+    `/correlation-policies/${id}`
+  );
+
+  return response.data;
+}
+
+export async function createCorrelationPolicy(
+  policy: CorrelationPolicyCreate
+): Promise<CorrelationPolicy> {
+  const response = await apiClient.post(
+    "/correlation-policies/",
+    policy
+  );
+
+  return response.data;
+}
+
+export async function updateCorrelationPolicy(
+  id: number,
+  policy: CorrelationPolicyUpdate
+): Promise<CorrelationPolicy> {
+  const response = await apiClient.put(
+    `/correlation-policies/${id}`,
+    policy
+  );
+
+  return response.data;
+}
+
+export async function deleteCorrelationPolicy(
+  id: number
+): Promise<void> {
+  await apiClient.delete(
+    `/correlation-policies/${id}`
+  );
+}
+
+export async function toggleCorrelationPolicy(
+  id: number,
+  enabled: boolean
+): Promise<CorrelationPolicy> {
+  return updateCorrelationPolicy(id, {
+    enabled,
+  });
+}

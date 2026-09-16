@@ -9,6 +9,7 @@ from app.integrations.newrelic.adapter import NewRelicAdapter
 from app.integrations.newrelic.service import NewRelicService
 from app.integrations.grafana.adapter import GrafanaAdapter
 from app.models.user import User
+from app.models.situation import Situation
 from fastapi import (
     APIRouter,
     Depends,
@@ -19,6 +20,126 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 from app.alerts.model import Alert
+
+
+def _normalize_status(value: object) -> str:
+    """Map provider lifecycle values to CogniOpsAI alert statuses."""
+    if value is None:
+        return "Open"
+
+    status = str(value).strip().lower()
+
+    if status in {"resolved", "closed", "inactive", "ok", "complete", "completed"}:
+        return "Resolved"
+
+    if status in {"investigating"}:
+        return "Investigating"
+
+    if status in {"firing", "open", "active", "activated", "new", "triggered"}:
+        return "Open"
+
+    return "Open"
+
+
+def _extract_provider_status(data: dict) -> str:
+    """Read lifecycle state from custom or standard webhook payloads."""
+    explicit_status = (
+        data.get("status")
+        or data.get("state")
+        or data.get("issue_state")
+        or data.get("issueState")
+        or data.get("alert_state")
+        or data.get("alertState")
+    )
+
+    if explicit_status is not None:
+        return _normalize_status(explicit_status)
+
+    # Some customized webhooks send a boolean closure flag.
+    if data.get("closed") is True or data.get("is_closed") is True:
+        return "Resolved"
+
+    if data.get("resolved") is True:
+        return "Resolved"
+
+    return "Open"
+
+
+def _resolve_situation_if_all_alerts_resolved(
+    db: Session,
+    situation_id: int | None,
+):
+    """Resolve a Situation only when every attached Alert is resolved."""
+    if situation_id is None:
+        return None
+
+    situation = (
+        db.query(Situation)
+        .filter(Situation.id == situation_id)
+        .first()
+    )
+
+    if situation is None:
+        return None
+
+    alerts = (
+        db.query(Alert)
+        .filter(Alert.situation_id == situation_id)
+        .all()
+    )
+
+    if alerts and all(
+        (alert.status or "Open").strip().lower()
+        in {"resolved", "closed"}
+        for alert in alerts
+    ):
+        situation.status = "Resolved"
+
+    db.commit()
+    db.refresh(situation)
+    return situation
+
+
+def _update_existing_alerts_for_resolution(
+    db: Session,
+    source: str,
+    issue_id: str | None,
+) -> list[Alert]:
+    """Resolve currently-open alerts for a provider issue."""
+    if not issue_id:
+        return []
+
+    open_alerts = (
+        db.query(Alert)
+        .filter(
+            Alert.source == source,
+            Alert.status != "Resolved",
+            Alert.tags.contains(f"issue:{issue_id}"),
+        )
+        .order_by(Alert.created_at.desc())
+        .all()
+    )
+
+    situation_ids: set[int] = set()
+
+    for alert in open_alerts:
+        alert.status = "Resolved"
+        if alert.situation_id is not None:
+            situation_ids.add(alert.situation_id)
+
+    if open_alerts:
+        db.commit()
+        for alert in open_alerts:
+            db.refresh(alert)
+
+        for situation_id in situation_ids:
+            _resolve_situation_if_all_alerts_resolved(
+                db,
+                situation_id,
+            )
+
+    return open_alerts
+
 
 router = APIRouter(
     prefix="/integrations",
@@ -149,41 +270,72 @@ async def newrelic_webhook(
         )
 
     payload = await request.json()
+    lifecycle_status = _extract_provider_status(payload)
 
-    # Prevent duplicate New Relic issues
-    issue_id = (
-        payload.get("issue_id")
-        or payload.get("issueId")
-    )
+    print("=== NEW RELIC WEBHOOK RECEIVED ===")
+    print(payload)
+    print(f"New Relic lifecycle status: {lifecycle_status}")
 
+    issue_id = payload.get("issue_id") or payload.get("issueId")
+
+    # A closed/resolved issue updates its existing alert(s) instead of
+    # creating a brand-new alert.
+    if lifecycle_status == "Resolved":
+        resolved_alerts = _update_existing_alerts_for_resolution(
+            db=db,
+            source="New Relic",
+            issue_id=issue_id,
+        )
+
+        return {
+            "source": "New Relic",
+            "status": "resolved",
+            "count": len(resolved_alerts),
+            "alert_ids": [alert.id for alert in resolved_alerts],
+        }
+
+    # Prevent duplicate New Relic firing events.
     if issue_id:
         existing_alert = (
             db.query(Alert)
             .filter(
                 Alert.source == "New Relic",
-                Alert.tags.contains(
-                    f"issue:{issue_id}"
-                ),
+                Alert.tags.contains(f"issue:{issue_id}"),
+                Alert.status != "Resolved",
             )
+            .order_by(Alert.created_at.desc())
             .first()
         )
 
         if existing_alert:
+            if existing_alert.status != "Open":
+                existing_alert.status = "Open"
+                db.commit()
+                db.refresh(existing_alert)
+
+            if existing_alert.situation_id is not None:
+                _resolve_situation_if_all_alerts_resolved(
+                    db,
+                    existing_alert.situation_id,
+                )
+
             return {
                 "source": "New Relic",
                 "status": "duplicate_ignored",
                 "alert_id": existing_alert.id,
             }
 
-    alert_data = NewRelicAdapter.normalize_webhook(
-        payload
-    )
+    alert_data = NewRelicAdapter.normalize_webhook(payload)
 
     alert = create_alert(
         db=db,
         alert=alert_data,
         auto_process=False,
     )
+
+    alert.status = "Open"
+    db.commit()
+    db.refresh(alert)
 
     background_tasks.add_task(
         process_newrelic_alert,
@@ -230,6 +382,35 @@ async def grafana_webhook(
     accepted_alerts = []
 
     for grafana_alert in alerts:
+        lifecycle_status = _extract_provider_status(grafana_alert)
+        issue_id = grafana_alert.get("issue_id")
+
+        print(
+            f"Grafana lifecycle status: {lifecycle_status}, "
+            f"issue_id={issue_id}"
+        )
+
+        # Resolved webhook: update existing occurrences instead of
+        # creating another Alert.
+        if lifecycle_status == "Resolved":
+            resolved_alerts = _update_existing_alerts_for_resolution(
+                db=db,
+                source="Grafana",
+                issue_id=issue_id,
+            )
+
+            accepted_alerts.append(
+                {
+                    "status": "resolved",
+                    "alert_ids": [
+                        alert.id
+                        for alert in resolved_alerts
+                    ],
+                }
+            )
+            continue
+
+        # Firing/active event: preserve every genuine occurrence.
         alert_data = GrafanaAdapter.normalize_webhook_alert(
             grafana_alert
         )
@@ -239,6 +420,10 @@ async def grafana_webhook(
             alert=alert_data,
             auto_process=False,
         )
+
+        alert.status = "Open"
+        db.commit()
+        db.refresh(alert)
 
         print(
             f"Grafana alert created: "

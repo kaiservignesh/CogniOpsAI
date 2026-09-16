@@ -1,23 +1,28 @@
-import { useState } from "react";
-import { Link as RouterLink } from "react-router-dom";
+import {
+  Link as RouterLink,
+  useNavigate,
+} from "react-router-dom";
+import {
+  useState,
+} from "react";
+
 import {
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+
 import {
   Alert as MuiAlert,
   Box,
   Button,
-  Card,
-  CardContent,
   Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControlLabel,
-  Switch,
+  Paper,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -26,8 +31,6 @@ import {
   TableRow,
   TextField,
   Typography,
-  Paper,
-  Stack,
 } from "@mui/material";
 
 import {
@@ -37,7 +40,7 @@ import {
 } from "../api/workflows";
 
 interface PolicyForm {
-  name: string;
+  name: string; 
   description: string;
   enabled: boolean;
   condition: string;
@@ -66,7 +69,9 @@ const emptyForm: PolicyForm = {
 };
 
 export default function Workflows() {
+
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const {
     data: policies = [],
@@ -114,7 +119,10 @@ export default function Workflows() {
         action: Record<string, unknown>;
       }>;
     }) =>
-      updateWorkflowPolicy(id, policy),
+      updateWorkflowPolicy(
+        id,
+        policy,
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["workflow-policies"],
@@ -141,39 +149,26 @@ export default function Workflows() {
   const openEdit = (
     policy: (typeof policies)[number],
   ) => {
-    setEditingId(policy.id);
-
-    setForm({
-      name: policy.name,
-      description: policy.description ?? "",
-      enabled: policy.enabled,
-      condition: JSON.stringify(
-        policy.condition,
-        null,
-        2,
-      ),
-      action: JSON.stringify(
-        policy.action,
-        null,
-        2,
-      ),
-    });
-
-    setFormError("");
-    setDialogOpen(true);
+    navigate(
+      `/workflow-builder/${policy.id}`,
+    );
   };
 
   const handleSave = () => {
     setFormError("");
 
     try {
-      const condition = JSON.parse(
-        form.condition,
-      ) as Record<string, unknown>;
+      const condition =
+        JSON.parse(form.condition) as Record<
+          string,
+          unknown
+        >;
 
-      const action = JSON.parse(
-        form.action,
-      ) as Record<string, unknown>;
+      const action =
+        JSON.parse(form.action) as Record<
+          string,
+          unknown
+        >;
 
       if (!form.name.trim()) {
         setFormError(
@@ -186,7 +181,8 @@ export default function Workflows() {
         createMutation.mutate({
           name: form.name.trim(),
           description:
-            form.description.trim() || undefined,
+            form.description.trim() ||
+            undefined,
           enabled: form.enabled,
           condition,
           action,
@@ -227,7 +223,7 @@ export default function Workflows() {
   if (isLoading) {
     return (
       <Typography>
-        Loading workflow policies...
+        Loading notification workflows...
       </Typography>
     );
   }
@@ -235,7 +231,7 @@ export default function Workflows() {
   if (isError) {
     return (
       <MuiAlert severity="error">
-        Unable to load workflow policies.
+        Unable to load notification workflows.
       </MuiAlert>
     );
   }
@@ -249,12 +245,12 @@ export default function Workflows() {
       <Stack
         direction={{
           xs: "column",
-          sm: "row",
+          md: "row",
         }}
         justifyContent="space-between"
         alignItems={{
           xs: "flex-start",
-          sm: "center",
+          md: "center",
         }}
         spacing={2}
         sx={{ mb: 3 }}
@@ -264,25 +260,39 @@ export default function Workflows() {
             variant="h4"
             fontWeight={700}
           >
-            Workflow Policies
+            Notification Workflows
           </Typography>
 
-          <Typography
-            color="text.secondary"
-          >
-            Define conditions and actions for
-            automated incident response.
+          <Typography color="text.secondary">
+            Create and manage notification
+            policies for automated incident
+            response.
           </Typography>
         </Box>
 
-        <Stack direction="row" spacing={1}>
+        <Stack
+          direction={{
+            xs: "column",
+            sm: "row",
+          }}
+          spacing={1}
+        >
           <Button
             component={RouterLink}
             to="/workflow-builder"
             variant="outlined"
           >
-            Visual Builder
+            Notification Workflow Builder
           </Button>
+
+          {/* <Button
+            component={RouterLink}
+            to="/correlation-workflows"
+            variant="outlined"
+          >
+            Correlation Workflows
+          </Button> */}
+
           <Button
             variant="contained"
             onClick={openCreate}
@@ -297,7 +307,7 @@ export default function Workflows() {
           severity="error"
           sx={{ mb: 2 }}
         >
-          Failed to create policy.
+          Failed to create notification policy.
         </MuiAlert>
       )}
 
@@ -306,7 +316,7 @@ export default function Workflows() {
           severity="error"
           sx={{ mb: 2 }}
         >
-          Failed to update policy.
+          Failed to update notification policy.
         </MuiAlert>
       )}
 
@@ -354,7 +364,8 @@ export default function Workflows() {
                   <Typography
                     variant="body2"
                     sx={{
-                      whiteSpace: "pre-wrap",
+                      whiteSpace:
+                        "pre-wrap",
                     }}
                   >
                     {JSON.stringify(
@@ -366,9 +377,6 @@ export default function Workflows() {
                 <TableCell>
                   <Typography
                     variant="body2"
-                    sx={{
-                      whiteSpace: "pre-wrap",
-                    }}
                   >
                     {String(
                       policy.action?.type ??
@@ -432,7 +440,8 @@ export default function Workflows() {
                   colSpan={6}
                   align="center"
                 >
-                  No workflow policies found.
+                  No notification workflows
+                  found.
                 </TableCell>
               </TableRow>
             )}
@@ -448,104 +457,85 @@ export default function Workflows() {
       >
         <DialogTitle>
           {editingId === null
-            ? "Create Workflow Policy"
-            : "Edit Workflow Policy"}
+            ? "Create Notification Policy"
+            : "Edit Notification Policy"}
         </DialogTitle>
 
         <DialogContent>
-          <Card
-            variant="outlined"
-            sx={{ mt: 1 }}
-          >
-            <CardContent>
-              <TextField
-                fullWidth
-                label="Policy Name"
-                value={form.name}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    name: event.target.value,
-                  })
-                }
-                margin="normal"
-              />
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              fullWidth
+              label="Policy Name"
+              value={form.name}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  name: event.target.value,
+                })
+              }
+            />
 
-              <TextField
-                fullWidth
-                label="Description"
-                value={form.description}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    description:
-                      event.target.value,
-                  })
-                }
-                margin="normal"
-              />
+            <TextField
+              fullWidth
+              label="Description"
+              value={form.description}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  description:
+                    event.target.value,
+                })
+              }
+            />
 
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={form.enabled}
-                    onChange={(event) =>
-                      setForm({
-                        ...form,
-                        enabled:
-                          event.target.checked,
-                      })
-                    }
-                  />
-                }
-                label="Enabled"
-                sx={{ my: 1 }}
-              />
+            <TextField
+              fullWidth
+              multiline
+              minRows={10}
+              label="Condition JSON"
+              value={form.condition}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  condition:
+                    event.target.value,
+                })
+              }
+              inputProps={{
+                style: {
+                  fontFamily:
+                    "monospace",
+                },
+              }}
+            />
 
-              <TextField
-                fullWidth
-                multiline
-                minRows={6}
-                label="Condition JSON"
-                value={form.condition}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    condition:
-                      event.target.value,
-                  })
-                }
-                margin="normal"
-                helperText="Example: { &quot;severity&quot;: &quot;Critical&quot; }"
-              />
+            <TextField
+              fullWidth
+              multiline
+              minRows={10}
+              label="Action JSON"
+              value={form.action}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  action:
+                    event.target.value,
+                })
+              }
+              inputProps={{
+                style: {
+                  fontFamily:
+                    "monospace",
+                },
+              }}
+            />
 
-              <TextField
-                fullWidth
-                multiline
-                minRows={6}
-                label="Action JSON"
-                value={form.action}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    action:
-                      event.target.value,
-                  })
-                }
-                margin="normal"
-                helperText="Example: { &quot;type&quot;: &quot;email&quot;, &quot;target&quot;: &quot;operations&quot; }"
-              />
-
-              {formError && (
-                <MuiAlert
-                  severity="error"
-                  sx={{ mt: 2 }}
-                >
-                  {formError}
-                </MuiAlert>
-              )}
-            </CardContent>
-          </Card>
+            {formError && (
+              <MuiAlert severity="error">
+                {formError}
+              </MuiAlert>
+            )}
+          </Stack>
         </DialogContent>
 
         <DialogActions>
@@ -560,7 +550,9 @@ export default function Workflows() {
           >
             {saving
               ? "Saving..."
-              : "Save Policy"}
+              : editingId === null
+                ? "Create Policy"
+                : "Update Policy"}
           </Button>
         </DialogActions>
       </Dialog>

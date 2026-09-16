@@ -5,15 +5,17 @@ from app.ai.correlation import HistoricalCorrelation
 from app.ai.service import AIService
 from app.alerts.model import Alert
 from app.correlation.engine import CorrelationEngine
+from app.correlation.policy_service import CorrelationPolicyService
 from app.models.situation import Situation
 from app.services.situation_service import get_situation_context
 from sqlalchemy.orm import Session
 from app.workflows.service import WorkflowPolicyService
-
+from sqlalchemy import func
 
 class CorrelationService:
     def __init__(self):
         self.engine = CorrelationEngine()
+        self.policy_service = CorrelationPolicyService()
         self.historical = HistoricalCorrelation()
         self.ai_service = AIService()
         self.workflow_service = WorkflowPolicyService()
@@ -36,18 +38,38 @@ class CorrelationService:
             .filter(
                 Alert.id != alert.id,
                 Alert.situation_id.is_(None),
+                func.lower(Alert.status).notin_(
+                    ["resolved", "closed"]
+                ),
             )
             .all()
         )
 
-        return [
-            candidate
-            for candidate in alerts
-            if self.engine.are_related(
+        # return [
+        #     candidate
+        #     for candidate in alerts
+        #     if self.engine.are_related(
+        #         alert,
+        #         candidate,
+        #     )
+        # ]
+
+        related_alerts = []
+        
+        for candidate in alerts:
+            policy_matches = self.policy_service.matching_policies(
+                db,
                 alert,
                 candidate,
             )
-        ]
+
+            if policy_matches or self.engine.are_related(
+                alert,
+                candidate,
+            ):
+                related_alerts.append(candidate)
+
+        return related_alerts
 
     def find_existing_situation(
         self,
@@ -57,8 +79,8 @@ class CorrelationService:
         situations = (
             db.query(Situation)
             .filter(
-                Situation.status.in_(
-                    ["Open", "Investigating"]
+                func.lower(Situation.status).in_(
+                    ["open", "investigating"]
                 )
             )
             .all()
@@ -79,10 +101,32 @@ class CorrelationService:
             )
 
             for existing_alert in situation_alerts:
-                score = self.engine.calculate_score(
+                # score = self.engine.calculate_score(
+                #     alert,
+                #     existing_alert,
+                # )
+
+                policy_matches = self.policy_service.matching_policies(
+                    db,
                     alert,
                     existing_alert,
                 )
+
+                if policy_matches:
+                    score = 100
+                    reasons = [
+                        f"Matched correlation policy: {policy.name}"
+                        for policy in policy_matches
+                    ]
+                else:
+                    score = self.engine.calculate_score(
+                        alert,
+                        existing_alert,
+                    )
+                    reasons = self.engine.get_reasons(
+                        alert,
+                        existing_alert,
+                    )
 
                 if score > best_score:
                     best_score = score
@@ -240,7 +284,15 @@ class CorrelationService:
                 situation=existing["situation"],
                 correlation_score=existing["score"],
                 correlation_reasons=existing["reasons"],
-                correlation_method="rule-based",
+                #correlation_method="rule-based",
+                correlation_method=(
+                    "user-policy"
+                    if any(
+                        reason.startswith("Matched correlation policy:")
+                        for reason in existing["reasons"]
+                    )
+                    else "rule-based"
+                ),
             )
 
             ai_result = None
@@ -403,19 +455,44 @@ class CorrelationService:
         best_reasons = []
 
         for candidate in related_alerts:
-            score = self.engine.calculate_score(
+            # score = self.engine.calculate_score(
+            #     alert,
+            #     candidate,
+            # )
+
+            # if score > best_rule_score:
+            #     best_rule_score = score
+            #     best_reasons = (
+            #         self.engine.get_reasons(
+            #             alert,
+            #             candidate,
+            #         )
+            #     )
+            policy_matches = self.policy_service.matching_policies(
+                db,
                 alert,
                 candidate,
             )
 
+            if policy_matches:
+                score = 100
+                reasons = [
+                    f"Matched correlation policy: {policy.name}"
+                    for policy in policy_matches
+                ]
+            else:
+                score = self.engine.calculate_score(
+                    alert,
+                    candidate,
+                )
+                reasons = self.engine.get_reasons(
+                    alert,
+                    candidate,
+                )
+
             if score > best_rule_score:
                 best_rule_score = score
-                best_reasons = (
-                    self.engine.get_reasons(
-                        alert,
-                        candidate,
-                    )
-                )
+                best_reasons = reasons
 
         context = {
             "title": alert.title,

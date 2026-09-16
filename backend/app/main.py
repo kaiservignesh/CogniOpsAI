@@ -6,6 +6,7 @@ from app.auth.router import router as auth_router
 from app.core.logger import logger
 from app.integrations.router import router as integration_router
 from app.api.correlation import router as correlation_router
+from app.api.correlation_policy import router as correlation_policy_router
 from app.api.ai import router as ai_router
 from app.api.workflow import router as workflow_router
 from app.alerts.model import Alert
@@ -54,3 +55,4 @@ app.include_router(situation_router)
 app.include_router(correlation_router)
 app.include_router(ai_router)
 app.include_router(workflow_router)
+app.include_router(correlation_policy_router)

@@ -12,56 +12,91 @@ import { Link } from "react-router-dom";
 import { logout } from "../../api/client";
 
 const menuItems = [
-  { label: "Dashboard", path: "/" },
-  { label: "Alerts", path: "/alerts" },
-  { label: "Situations", path: "/situations" },
-  { label: "Workflows", path: "/workflows" },
   {
-    label: "Executions",
+    label: "Dashboard",
+    path: "/",
+  },
+  {
+    label: "Alerts",
+    path: "/alerts",
+  },
+  {
+    label: "Situations",
+    path: "/situations",
+  },
+
+  // Notification workflow section
+  {
+    label: "Notification Workflows",
+    path: "/workflows",
+  },
+  {
+    label: "Notification Workflow Builder",
+    path: "/workflow-builder",
+  },
+
+  // Correlation workflow section
+  {
+    label: "Correlation Workflows",
+    path: "/correlation-workflows",
+  },
+  {
+    label: "Correlation Workflow Builder",
+    path: "/correlation-workflow-builder",
+  },
+
+  {
+    label: "Workflow Executions",
     path: "/workflow-executions",
   },
-  // {
-  //   label: "Workflow Builder",
-  //   path: "/workflow-builder",
-  // },
 ];
 
 export default function Sidebar() {
   return (
     <Box
       sx={{
-        width: 230,
+        width: 250,
+        flexShrink: 0,
         borderRight: 1,
         borderColor: "divider",
+        backgroundColor: "background.paper",
       }}
     >
       <Toolbar />
 
       <Divider />
 
-      <List>
+      <List sx={{ px: 1 }}>
         {menuItems.map((item) => (
           <ListItemButton
             key={item.path}
             component={Link}
             to={item.path}
+            sx={{
+              borderRadius: 1,
+              mb: 0.5,
+            }}
           >
             <ListItemText
               primary={item.label}
+              primaryTypographyProps={{
+                fontSize: 14,
+              }}
             />
           </ListItemButton>
         ))}
       </List>
 
-      <Button
-        fullWidth
-        variant="outlined"
-        color="error"
-        onClick={logout}
-        sx={{ mt: 2 }}
-      >
-        Logout
-      </Button>
+      <Box sx={{ p: 2 }}>
+        <Button
+          fullWidth
+          variant="outlined"
+          color="error"
+          onClick={logout}
+        >
+          Logout
+        </Button>
+      </Box>
     </Box>
   );
 }

@@ -44,7 +44,7 @@ def create_alert(
 
 
 def get_all_alerts(db: Session):
-    return db.query(Alert).all()
+    return db.query(Alert).order_by(Alert.created_at.desc()).all()
 
 
 def get_alert_by_id(db: Session, alert_id: int):

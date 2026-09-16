@@ -1,4 +1,11 @@
-import { useCallback, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { useNavigate, useParams } from "react-router-dom";
+
 import {
   addEdge,
   Background,
@@ -8,21 +15,28 @@ import {
   MiniMap,
   Position,
   ReactFlow,
-  useEdgesState,
-  useNodesState,
   type Connection,
   type Edge,
   type Node,
+  useEdgesState,
+  useNodesState,
 } from "@xyflow/react";
+
 import "@xyflow/react/dist/style.css";
 
 import {
-  Alert as MuiAlert,
+  createWorkflowPolicy,
+  getWorkflowPolicies,
+  updateWorkflowPolicy,
+  type WorkflowPolicyInput,
+} from "../api/workflows";
+
+import {
+  Alert,
   Box,
   Button,
   Card,
   CardContent,
-  Chip,
   FormControl,
   InputLabel,
   MenuItem,
@@ -32,286 +46,665 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { Link as RouterLink } from "react-router-dom";
-import { createWorkflowPolicy, type WorkflowPolicyInput } from "../api/workflows";
 
-type BuilderData = {
-  label: string;
-  subtitle: string;
-  tone: "primary" | "warning" | "info" | "success";
-};
-
-type BuilderNode = Node<BuilderData>;
-
-const initialNodes: BuilderNode[] = [
-  {
-    id: "policy",
-    position: { x: 40, y: 160 },
-    data: {
-      label: "Policy",
-      subtitle: "Workflow identity",
-      tone: "primary",
-    },
-    type: "builder",
-  },
+const initialNodes: Node[] = [
   {
     id: "condition",
-    position: { x: 330, y: 160 },
+    position: {
+      x: 100,
+      y: 150,
+    },
     data: {
       label: "Condition",
-      subtitle: "When should it run?",
-      tone: "warning",
     },
-    type: "builder",
+    type: "condition",
   },
   {
-    id: "tag",
-    position: { x: 630, y: 160 },
-    data: {
-      label: "Tag",
-      subtitle: "Match an alert tag",
-      tone: "info",
+    id: "action",
+    position: {
+      x: 500,
+      y: 150,
     },
-    type: "builder",
-  },
-  {
-    id: "notification",
-    position: { x: 930, y: 160 },
     data: {
-      label: "Notification",
-      subtitle: "Execute response",
-      tone: "success",
+      label: "Action",
     },
-    type: "builder",
+    type: "action",
   },
 ];
 
 const initialEdges: Edge[] = [
   {
-    id: "policy-condition",
-    source: "policy",
-    target: "condition",
-    markerEnd: { type: MarkerType.ArrowClosed },
-  },
-  {
-    id: "condition-tag",
+    id: "condition-action",
     source: "condition",
-    target: "tag",
-    markerEnd: { type: MarkerType.ArrowClosed },
-  },
-  {
-    id: "tag-notification",
-    source: "tag",
-    target: "notification",
-    markerEnd: { type: MarkerType.ArrowClosed },
+    target: "action",
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+    },
   },
 ];
 
-function BuilderNode({ data }: { data: BuilderData }) {
-  const toneMap = {
-    primary: "primary.main",
-    warning: "warning.main",
-    info: "info.main",
-    success: "success.main",
-  } as const;
-
+function ConditionNode({
+  data,
+}: {
+  data: {
+    label: string;
+  };
+}) {
   return (
     <Box
       sx={{
-        minWidth: 190,
+        minWidth: 180,
         border: 2,
-        borderColor: toneMap[data.tone],
+        borderColor: "primary.main",
         borderRadius: 2,
         bgcolor: "background.paper",
-        boxShadow: 2,
-        px: 2,
-        py: 1.5,
+        p: 2,
       }}
     >
-      <Handle type="target" position={Position.Left} />
-      <Typography fontWeight={800}>{data.label}</Typography>
-      <Typography variant="caption" color="text.secondary">
-        {data.subtitle}
+      <Handle
+        type="source"
+        position={Position.Right}
+      />
+
+      <Typography fontWeight={700}>
+        {data.label}
       </Typography>
-      <Handle type="source" position={Position.Right} />
+
+      <Typography
+        variant="body2"
+        color="text.secondary"
+      >
+        Alert / Situation condition
+      </Typography>
     </Box>
   );
 }
 
-const nodeTypes = { builder: BuilderNode };
+function ActionNode({
+  data,
+}: {
+  data: {
+    label: string;
+  };
+}) {
+  return (
+    <Box
+      sx={{
+        minWidth: 180,
+        border: 2,
+        borderColor: "success.main",
+        borderRadius: 2,
+        bgcolor: "background.paper",
+        p: 2,
+      }}
+    >
+      <Handle
+        type="target"
+        position={Position.Left}
+      />
+
+      <Typography fontWeight={700}>
+        {data.label}
+      </Typography>
+
+      <Typography
+        variant="body2"
+        color="text.secondary"
+      >
+        Execute workflow action
+      </Typography>
+    </Box>
+  );
+}
+
+const nodeTypes = {
+  condition: ConditionNode,
+  action: ActionNode,
+};
 
 export default function WorkflowBuilder() {
-  const [nodes, setNodes, onNodesChange] = useNodesState<BuilderNode>(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const navigate = useNavigate();
 
-  const [policyName, setPolicyName] = useState("");
-  const [description, setDescription] = useState("");
-  const [severity, setSeverity] = useState("Critical");
-  const [environment, setEnvironment] = useState("production");
-  const [service, setService] = useState("");
-  const [source, setSource] = useState("");
-  const [policyNameMatch, setPolicyNameMatch] = useState("");
-  const [tagKey, setTagKey] = useState("");
-  const [tagValue, setTagValue] = useState("");
-  const [actionType, setActionType] = useState("email");
-  const [recipient, setRecipient] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
+  const { id } =
+    useParams<{
+      id?: string;
+    }>();
 
-  const conditionPreview = useMemo(() => {
-    const condition: Record<string, unknown> = { severity };
-    if (environment.trim()) condition.environment = environment.trim();
-    if (service.trim()) condition.service = service.trim();
-    if (source.trim()) condition.source = source.trim();
-    if (policyNameMatch.trim()) condition.policy_name = policyNameMatch.trim();
-    if (tagKey.trim() && tagValue.trim()) {
-      condition.tag = `${tagKey.trim()}:${tagValue.trim()}`;
+  const editingId = id
+    ? Number(id)
+    : null;
+
+  const [
+    nodes,
+    ,
+    onNodesChange,
+  ] = useNodesState(
+    initialNodes,
+  );
+
+  const [
+    edges,
+    setEdges,
+    onEdgesChange,
+  ] = useEdgesState(
+    initialEdges,
+  );
+
+  const [
+    policyName,
+    setPolicyName,
+  ] = useState("");
+
+  const [
+    description,
+    setDescription,
+  ] = useState("");
+
+  const [
+    severity,
+    setSeverity,
+  ] = useState("Critical");
+
+  const [
+    environment,
+    setEnvironment,
+  ] = useState("production");
+
+  const [
+    service,
+    setService,
+  ] = useState("");
+
+  const [
+    actionType,
+    setActionType,
+  ] = useState("email");
+
+  const [
+    recipient,
+    setRecipient,
+  ] = useState("");
+
+  const [
+    saving,
+    setSaving,
+  ] = useState(false);
+
+  const [
+    message,
+    setMessage,
+  ] = useState("");
+
+  const [
+    loadingPolicy,
+    setLoadingPolicy,
+  ] = useState(
+    Boolean(editingId),
+  );
+
+  /*
+   * Load existing notification workflow
+   * when editing.
+   */
+  useEffect(() => {
+    if (!editingId) {
+      setLoadingPolicy(false);
+      return;
     }
-    return condition;
-  }, [environment, policyNameMatch, service, severity, source, tagKey, tagValue]);
 
-  const actionPreview = useMemo(() => {
-    const action: Record<string, unknown> = {
-      type: actionType,
-      target: actionType === "email" ? "operations" : actionType,
-    };
-    if (actionType === "email") {
-      action.recipient = recipient.trim();
-      action.subject = policyName.trim() || "CogniOpsAI workflow notification";
-      action.body = description.trim() || "CogniOpsAI workflow notification.";
-    }
-    return action;
-  }, [actionType, description, policyName, recipient]);
+    getWorkflowPolicies()
+      .then((policies) => {
+        const policy = policies.find(
+          (item) =>
+            item.id === editingId,
+        );
 
+        if (!policy) {
+          setMessage(
+            "Notification workflow not found.",
+          );
+          return;
+        }
+
+        const condition =
+          policy.condition ?? {};
+
+        const action =
+          policy.action ?? {};
+
+        setPolicyName(
+          policy.name,
+        );
+
+        setDescription(
+          policy.description ?? "",
+        );
+
+        setSeverity(
+          String(
+            condition.severity ??
+              "Critical",
+          ),
+        );
+
+        setEnvironment(
+          String(
+            condition.environment ??
+              "production",
+          ),
+        );
+
+        setService(
+          String(
+            condition.service ??
+              "",
+          ),
+        );
+
+        setActionType(
+          String(
+            action.type ??
+              "email",
+          ),
+        );
+
+        setRecipient(
+          String(
+            action.recipient ??
+              "",
+          ),
+        );
+      })
+      .catch(() => {
+        setMessage(
+          "Unable to load notification workflow.",
+        );
+      })
+      .finally(() => {
+        setLoadingPolicy(false);
+      });
+  }, [editingId]);
+
+  /*
+   * React Flow connection handling.
+   */
   const onConnect = useCallback(
     (connection: Connection) => {
-      setEdges((currentEdges) =>
-        addEdge(
-          {
-            ...connection,
-            markerEnd: { type: MarkerType.ArrowClosed },
-          },
-          currentEdges,
-        ),
+      setEdges(
+        (currentEdges) =>
+          addEdge(
+            {
+              ...connection,
+              markerEnd: {
+                type: MarkerType.ArrowClosed,
+              },
+            },
+            currentEdges,
+          ),
       );
     },
     [setEdges],
   );
 
+  /*
+   * Build the same JSON payload used
+   * when creating/updating the policy.
+   */
+  const workflowJson = useMemo(
+    () => {
+      const condition: Record<
+        string,
+        unknown
+      > = {
+        severity,
+        environment,
+      };
+
+      if (service.trim()) {
+        condition.service =
+          service.trim();
+      }
+
+      const action: Record<
+        string,
+        unknown
+      > = {
+        type: actionType,
+        target:
+          actionType === "email"
+            ? "operations"
+            : actionType,
+      };
+
+      if (
+        actionType === "email"
+      ) {
+        action.recipient =
+          recipient.trim();
+
+        action.subject =
+          policyName;
+
+        action.body =
+          description.trim() ||
+          "CogniOpsAI workflow notification.";
+      }
+
+      const policy:
+        WorkflowPolicyInput = {
+          name:
+            policyName.trim(),
+          description:
+            description.trim() ||
+            undefined,
+          enabled: true,
+          condition,
+          action,
+        };
+
+      return policy;
+    },
+    [
+      policyName,
+      description,
+      severity,
+      environment,
+      service,
+      actionType,
+      recipient,
+    ],
+  );
+
+  const jsonPreview = useMemo(
+    () =>
+      JSON.stringify(
+        workflowJson,
+        null,
+        2,
+      ),
+    [workflowJson],
+  );
+
+  /*
+   * Save / update notification workflow.
+   */
   const handleSave = async () => {
     setMessage("");
 
     if (!policyName.trim()) {
-      setMessage("Policy name is required.");
+      setMessage(
+        "Policy name is required.",
+      );
       return;
     }
 
-    if (actionType === "email" && !recipient.trim()) {
-      setMessage("Recipient is required for email actions.");
+    if (
+      actionType === "email" &&
+      !recipient.trim()
+    ) {
+      setMessage(
+        "Recipient is required for email actions.",
+      );
       return;
     }
-
-    if (tagKey.trim() !== "" && tagValue.trim() === "") {
-      setMessage("Enter a tag value or clear the tag key.");
-      return;
-    }
-
-    const policy: WorkflowPolicyInput = {
-      name: policyName.trim(),
-      description: description.trim() || undefined,
-      enabled: true,
-      condition: conditionPreview,
-      action: actionPreview,
-    };
 
     try {
       setSaving(true);
-      await createWorkflowPolicy(policy);
-      setMessage("Visual workflow saved successfully.");
-      setPolicyName("");
-      setDescription("");
-      setService("");
-      setSource("");
-      setPolicyNameMatch("");
-      setTagKey("");
-      setTagValue("");
-      setRecipient("");
+
+      if (editingId) {
+        await updateWorkflowPolicy(
+          editingId,
+          workflowJson,
+        );
+
+        setMessage(
+          "Notification workflow updated successfully.",
+        );
+
+        setTimeout(() => {
+          navigate(
+            "/workflows",
+          );
+        }, 600);
+      } else {
+        await createWorkflowPolicy(
+          workflowJson,
+        );
+
+        setMessage(
+          "Notification workflow created successfully.",
+        );
+
+        setPolicyName("");
+        setDescription("");
+        setService("");
+        setRecipient("");
+      }
     } catch {
-      setMessage("Unable to create workflow policy. Check the API and policy name.");
+      setMessage(
+        editingId
+          ? "Unable to update workflow policy."
+          : "Unable to create workflow policy.",
+      );
     } finally {
       setSaving(false);
     }
   };
 
+  if (loadingPolicy) {
+    return (
+      <Typography>
+        Loading notification workflow...
+      </Typography>
+    );
+  }
+
   return (
     <Box>
-      <Stack
-        direction={{ xs: "column", md: "row" }}
-        justifyContent="space-between"
-        alignItems={{ xs: "flex-start", md: "center" }}
-        spacing={2}
+      {/* =====================================================
+          Page Header
+         ===================================================== */}
+
+      <Typography
+        variant="h4"
+        fontWeight={700}
+        gutterBottom
+      >
+        {editingId
+          ? "Edit Notification Workflow"
+          : "Notification Workflow Builder"}
+      </Typography>
+
+      <Typography
+        color="text.secondary"
         sx={{ mb: 3 }}
       >
-        <Box>
-          <Typography variant="h4" fontWeight={800}>
-            Visual Workflow Builder
-          </Typography>
-          <Typography color="text.secondary">
-            Build a condition-driven incident response flow using connected nodes.
-          </Typography>
-        </Box>
-        <Button component={RouterLink} to="/workflows" variant="outlined">
-          Back to Policies
-        </Button>
-      </Stack>
+        Define a condition-driven automation
+        workflow for incident notifications.
+      </Typography>
 
       <Stack spacing={3}>
+        {/* ===================================================
+            Policy Configuration
+           =================================================== */}
+
         <Card>
           <CardContent>
+            <Typography
+              variant="h6"
+              fontWeight={700}
+              gutterBottom
+            >
+              Policy Configuration
+            </Typography>
+
             <Stack spacing={2}>
-              <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+              <TextField
+                fullWidth
+                label="Policy Name"
+                value={policyName}
+                onChange={(event) =>
+                  setPolicyName(
+                    event.target.value,
+                  )
+                }
+              />
+
+              <TextField
+                fullWidth
+                label="Description"
+                value={description}
+                onChange={(event) =>
+                  setDescription(
+                    event.target.value,
+                  )
+                }
+              />
+
+              <Stack
+                direction={{
+                  xs: "column",
+                  md: "row",
+                }}
+                spacing={2}
+              >
+                <FormControl fullWidth>
+                  <InputLabel>
+                    Severity
+                  </InputLabel>
+
+                  <Select
+                    value={severity}
+                    label="Severity"
+                    onChange={(event) =>
+                      setSeverity(
+                        event.target.value,
+                      )
+                    }
+                  >
+                    <MenuItem value="Critical">
+                      Critical
+                    </MenuItem>
+
+                    <MenuItem value="High">
+                      High
+                    </MenuItem>
+
+                    <MenuItem value="Medium">
+                      Medium
+                    </MenuItem>
+
+                    <MenuItem value="Low">
+                      Low
+                    </MenuItem>
+                  </Select>
+                </FormControl>
+
                 <TextField
                   fullWidth
-                  label="Policy Name"
-                  value={policyName}
-                  onChange={(event) => setPolicyName(event.target.value)}
+                  label="Environment"
+                  value={environment}
+                  onChange={(event) =>
+                    setEnvironment(
+                      event.target.value,
+                    )
+                  }
                 />
+
                 <TextField
                   fullWidth
-                  label="Description"
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
+                  label="Service"
+                  value={service}
+                  onChange={(event) =>
+                    setService(
+                      event.target.value,
+                    )
+                  }
                 />
               </Stack>
-              <Chip
-                label="Policy → Condition → Tag → Notification"
-                variant="outlined"
-                sx={{ width: "fit-content" }}
-              />
+
+              <FormControl fullWidth>
+                <InputLabel>
+                  Action Type
+                </InputLabel>
+
+                <Select
+                  value={actionType}
+                  label="Action Type"
+                  onChange={(event) =>
+                    setActionType(
+                      event.target.value,
+                    )
+                  }
+                >
+                  <MenuItem value="email">
+                    Email
+                  </MenuItem>
+
+                  <MenuItem value="notification">
+                    Mock Notification
+                  </MenuItem>
+
+                  <MenuItem value="servicenow">
+                    ServiceNow
+                  </MenuItem>
+
+                  <MenuItem value="xmatters">
+                    xMatters
+                  </MenuItem>
+                </Select>
+              </FormControl>
+
+              {actionType ===
+                "email" && (
+                <TextField
+                  fullWidth
+                  label="Recipient Email"
+                  value={recipient}
+                  onChange={(event) =>
+                    setRecipient(
+                      event.target.value,
+                    )
+                  }
+                />
+              )}
             </Stack>
           </CardContent>
         </Card>
 
+        {/* ===================================================
+            React Flow
+           =================================================== */}
+
         <Card>
           <CardContent>
-            <Typography variant="h6" fontWeight={800} gutterBottom>
-              Workflow Canvas
+            <Typography
+              variant="h6"
+              fontWeight={700}
+              gutterBottom
+            >
+              Notification Workflow
             </Typography>
+
             <Box
               sx={{
-                height: 430,
+                height: 420,
                 border: 1,
-                borderColor: "divider",
+                borderColor:
+                  "divider",
                 borderRadius: 2,
-                overflow: "hidden",
               }}
             >
               <ReactFlow
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
+                onNodesChange={
+                  onNodesChange
+                }
+                onEdgesChange={
+                  onEdgesChange
+                }
                 onConnect={onConnect}
                 fitView
               >
@@ -323,183 +716,119 @@ export default function WorkflowBuilder() {
           </CardContent>
         </Card>
 
-        <Stack direction={{ xs: "column", lg: "row" }} spacing={3}>
-          <Card sx={{ flex: 1 }}>
-            <CardContent>
-              <Typography variant="h6" fontWeight={800} gutterBottom>
-                Condition Node
-              </Typography>
-              <Stack spacing={2}>
-                <FormControl fullWidth>
-                  <InputLabel>Severity</InputLabel>
-                  <Select
-                    value={severity}
-                    label="Severity"
-                    onChange={(event) => setSeverity(event.target.value)}
-                  >
-                    <MenuItem value="Critical">Critical</MenuItem>
-                    <MenuItem value="High">High</MenuItem>
-                    <MenuItem value="Medium">Medium</MenuItem>
-                    <MenuItem value="Low">Low</MenuItem>
-                  </Select>
-                </FormControl>
-                <TextField
-                  fullWidth
-                  label="Environment"
-                  value={environment}
-                  onChange={(event) => setEnvironment(event.target.value)}
-                />
-                <TextField
-                  fullWidth
-                  label="Service (optional)"
-                  value={service}
-                  onChange={(event) => setService(event.target.value)}
-                />
-                <TextField
-                  fullWidth
-                  label="Source (optional)"
-                  placeholder="Grafana / New Relic / Loki"
-                  value={source}
-                  onChange={(event) => setSource(event.target.value)}
-                />
-                <TextField
-                  fullWidth
-                  label="Policy Name Match (optional)"
-                  value={policyNameMatch}
-                  onChange={(event) => setPolicyNameMatch(event.target.value)}
-                />
-              </Stack>
-            </CardContent>
-          </Card>
-
-          <Card sx={{ flex: 1 }}>
-            <CardContent>
-              <Typography variant="h6" fontWeight={800} gutterBottom>
-                Tag Node
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Match a tag from an alert in the Situation.
-              </Typography>
-              <Stack spacing={2}>
-                <TextField
-                  fullWidth
-                  label="Tag Key"
-                  placeholder="environment"
-                  value={tagKey}
-                  onChange={(event) => setTagKey(event.target.value)}
-                />
-                <TextField
-                  fullWidth
-                  label="Tag Value"
-                  placeholder="production"
-                  value={tagValue}
-                  onChange={(event) => setTagValue(event.target.value)}
-                />
-                <MuiAlert severity="info">
-                  Saved as <strong>{tagKey || "tag"}:{tagValue || "value"}</strong> in the policy condition.
-                </MuiAlert>
-              </Stack>
-            </CardContent>
-          </Card>
-
-          <Card sx={{ flex: 1 }}>
-            <CardContent>
-              <Typography variant="h6" fontWeight={800} gutterBottom>
-                Notification Node
-              </Typography>
-              <Stack spacing={2}>
-                <FormControl fullWidth>
-                  <InputLabel>Action Type</InputLabel>
-                  <Select
-                    value={actionType}
-                    label="Action Type"
-                    onChange={(event) => setActionType(event.target.value)}
-                  >
-                    <MenuItem value="email">Email</MenuItem>
-                    <MenuItem value="notification">Mock Notification</MenuItem>
-                    <MenuItem value="servicenow">ServiceNow</MenuItem>
-                    <MenuItem value="xmatters">xMatters</MenuItem>
-                  </Select>
-                </FormControl>
-                {actionType === "email" && (
-                  <TextField
-                    fullWidth
-                    label="Recipient Email"
-                    value={recipient}
-                    onChange={(event) => setRecipient(event.target.value)}
-                  />
-                )}
-              </Stack>
-            </CardContent>
-          </Card>
-        </Stack>
+        {/* ===================================================
+            JSON Preview
+           =================================================== */}
 
         <Card>
           <CardContent>
-            <Typography variant="h6" fontWeight={800} gutterBottom>
-              Generated Policy
-            </Typography>
-            <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-              <Box sx={{ flex: 1 }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Condition JSON
-                </Typography>
-                <Box
-                  component="pre"
-                  sx={{
-                    m: 0,
-                    p: 2,
-                    bgcolor: "action.hover",
-                    borderRadius: 2,
-                    overflow: "auto",
-                    fontSize: 13,
-                  }}
+            <Stack
+              direction={{
+                xs: "column",
+                sm: "row",
+              }}
+              justifyContent="space-between"
+              alignItems={{
+                xs: "flex-start",
+                sm: "center",
+              }}
+              spacing={2}
+              sx={{ mb: 2 }}
+            >
+              <Box>
+                <Typography
+                  variant="h6"
+                  fontWeight={700}
                 >
-                  {JSON.stringify(conditionPreview, null, 2)}
-                </Box>
-              </Box>
-              <Box sx={{ flex: 1 }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Action JSON
+                  JSON Preview
                 </Typography>
-                <Box
-                  component="pre"
-                  sx={{
-                    m: 0,
-                    p: 2,
-                    bgcolor: "action.hover",
-                    borderRadius: 2,
-                    overflow: "auto",
-                    fontSize: 13,
-                  }}
+
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
                 >
-                  {JSON.stringify(actionPreview, null, 2)}
-                </Box>
+                  This JSON is generated automatically
+                  from the notification workflow
+                  configuration above.
+                </Typography>
               </Box>
+
+              <Button
+                variant="outlined"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(
+                      jsonPreview,
+                    );
+
+                    setMessage(
+                      "JSON copied to clipboard.",
+                    );
+                  } catch {
+                    setMessage(
+                      "Unable to copy JSON to clipboard.",
+                    );
+                  }
+                }}
+              >
+                Copy JSON
+              </Button>
             </Stack>
+
+            <TextField
+              fullWidth
+              multiline
+              minRows={14}
+              value={jsonPreview}
+              InputProps={{
+                readOnly: true,
+              }}
+              inputProps={{
+                style: {
+                  fontFamily:
+                    "monospace",
+                  fontSize:
+                    "13px",
+                },
+              }}
+            />
           </CardContent>
         </Card>
 
-        <Stack direction="row" justifyContent="flex-end">
+        {/* ===================================================
+            Save / Update
+           =================================================== */}
+
+        <Stack
+          direction="row"
+          justifyContent="flex-end"
+        >
           <Button
             variant="contained"
             size="large"
             onClick={handleSave}
             disabled={saving}
           >
-            {saving ? "Saving..." : "Save Workflow"}
+            {saving
+              ? "Saving..."
+              : editingId
+                ? "Update Notification Workflow"
+                : "Save Notification Workflow"}
           </Button>
         </Stack>
 
+        {/* ===================================================
+            Messages
+           =================================================== */}
+
         <Snackbar
           open={Boolean(message)}
-          autoHideDuration={4500}
-          onClose={() => setMessage("")}
-        >
-          <MuiAlert severity={message.includes("success") ? "success" : "error"}>
-            {message}
-          </MuiAlert>
-        </Snackbar>
+          autoHideDuration={4000}
+          onClose={() =>
+            setMessage("")
+          }
+          message={message}
+        />
       </Stack>
     </Box>
   );

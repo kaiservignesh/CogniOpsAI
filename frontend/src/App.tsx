@@ -10,6 +10,8 @@ import SituationDetails from "./pages/SituationDetails";
 import Workflows from "./pages/Workflows";
 import WorkflowExecutions from "./pages/WorkflowExecutions";
 import WorkflowBuilder from "./pages/WorkflowBuilder";
+import CorrelationWorkflowBuilder from "./pages/CorrelationWorkflowBuilder";
+import CorrelationWorkflows from "./pages/CorrelationWorkflows";
 
 export default function App() {
   return (
@@ -55,6 +57,27 @@ export default function App() {
             <Route
               path="/workflow-builder"
               element={<WorkflowBuilder />}
+            />
+
+            <Route
+              path="/workflow-builder/:id"
+              element={<WorkflowBuilder />}
+            />
+
+            {/* Correlation Workflows */}
+            <Route
+              path="/correlation-workflows"
+              element={<CorrelationWorkflows />}
+            />
+
+            <Route
+              path="/correlation-workflow-builder"
+              element={<CorrelationWorkflowBuilder />}
+            />
+
+            <Route
+              path="/correlation-workflow-builder/:id"
+              element={<CorrelationWorkflowBuilder />}
             />
           </Route>
         </Route>

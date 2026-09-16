@@ -1,7 +1,49 @@
 from app.alerts.schema import AlertCreate
 
+def normalize_status(value: str | None) -> str:
+    if not value:
+        return "Open"
 
+    normalized = value.strip().lower()
+
+    status_map = {
+        "open": "Open",
+        "opened": "Open",
+        "firing": "Open",
+        "triggered": "Open",
+        "acknowledged": "Investigating",
+        "investigating": "Investigating",
+        "closed": "Resolved",
+        "resolved": "Resolved",
+    }
+
+    return status_map.get(
+        normalized,
+        value.strip().title(),
+    )
+
+def normalize_severity(value: str | None) -> str:
+    if not value:
+        return "Medium"
+
+    normalized = value.strip().lower()
+
+    severity_map = {
+        "critical": "Critical",
+        "high": "High",
+        "medium": "Medium",
+        "warning": "Medium",
+        "low": "Low",
+        "info": "Low",
+        "informational": "Low",
+    }
+
+    return severity_map.get(
+        normalized,
+        value.strip().title(),
+    )
 class NewRelicAdapter:
+       
     @staticmethod
     def normalize_alert(data: dict) -> AlertCreate:
         violation = data.get("violation", {})
@@ -72,9 +114,15 @@ class NewRelicAdapter:
             or "Alert received from New Relic"
         )
 
-        severity = (
+        status = normalize_status(
+            data.get("status")
+            or data.get("state")
+            or data.get("issue_state")
+        )
+
+        severity = normalize_severity(
             data.get("priority")
-            or data.get("severity")
+            or data.get("severity")                                                            
             or "Medium"
         )
 
@@ -119,6 +167,9 @@ class NewRelicAdapter:
         # else:
         #     tags = []
 
+        if entity:
+            tags.append(f"entity:{entity}")
+
         if issue_id:
             tags.append(f"issue:{issue_id}")
 
@@ -127,8 +178,11 @@ class NewRelicAdapter:
             description=description,
             source="New Relic",
             severity=severity,
+            status=status,
             service=service,
             environment=environment,
             policy_name=policy_name,
-            tags=",".join(tags),
+            tags=",".join(tags) or None,
         )
+
+    

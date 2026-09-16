@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 from app.workflows.model import WorkflowPolicy
 from app.workflows.execution import WorkflowExecution
+from app.correlation.model import CorrelationPolicy
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
