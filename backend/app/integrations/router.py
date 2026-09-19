@@ -105,40 +105,52 @@ def _update_existing_alerts_for_resolution(
     source: str,
     issue_id: str | None,
 ) -> list[Alert]:
-    """Resolve currently-open alerts for a provider issue."""
+    """Resolve only the alert with the exact provider issue tag."""
     if not issue_id:
         return []
+
+    expected_tag = f"issue:{issue_id}"
 
     open_alerts = (
         db.query(Alert)
         .filter(
             Alert.source == source,
             Alert.status != "Resolved",
-            Alert.tags.contains(f"issue:{issue_id}"),
         )
         .order_by(Alert.created_at.desc())
         .all()
     )
 
-    situation_ids: set[int] = set()
+    matching_alert = None
 
     for alert in open_alerts:
-        alert.status = "Resolved"
-        if alert.situation_id is not None:
-            situation_ids.add(alert.situation_id)
+        tags = [
+            tag.strip()
+            for tag in (alert.tags or "").split(",")
+            if tag.strip()
+        ]
 
-    if open_alerts:
-        db.commit()
-        for alert in open_alerts:
-            db.refresh(alert)
+        if expected_tag in tags:
+            matching_alert = alert
+            break
 
-        for situation_id in situation_ids:
-            _resolve_situation_if_all_alerts_resolved(
-                db,
-                situation_id,
-            )
+    if matching_alert is None:
+        return []
 
-    return open_alerts
+    matching_alert.status = "Resolved"
+
+    situation_id = matching_alert.situation_id
+
+    db.commit()
+    db.refresh(matching_alert)
+
+    if situation_id is not None:
+        _resolve_situation_if_all_alerts_resolved(
+            db,
+            situation_id,
+        )
+
+    return [matching_alert]
 
 
 router = APIRouter(

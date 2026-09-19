@@ -35,7 +35,6 @@ import {
   Button,
   Card,
   CardContent,
-  Chip,
   FormControl,
   IconButton,
   InputLabel,
@@ -303,8 +302,8 @@ export default function CorrelationWorkflowBuilder() {
 
   useEffect(() => {
     if (!editingId) {
-      setJsonText("");
-      setLoadingPolicy(false);
+      //setJsonText("");
+      //setLoadingPolicy(false);
       return;
     }
 
@@ -396,7 +395,7 @@ export default function CorrelationWorkflowBuilder() {
 
         rules: activeRules.map(
           ({
-            id: _id,
+            // id: _id,
             ...rule
           }) => rule,
         ),
@@ -406,6 +405,7 @@ export default function CorrelationWorkflowBuilder() {
         timeWindow,
     };
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setJsonText(
       JSON.stringify(
         generated,

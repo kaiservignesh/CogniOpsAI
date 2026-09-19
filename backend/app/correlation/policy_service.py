@@ -146,6 +146,61 @@ class CorrelationPolicyService:
 
         return any(results) if match_mode == "any" else all(results)
 
+    @classmethod
+    def specificity_score(cls, policy: CorrelationPolicy) -> tuple[int, int, int, int]:
+        """
+        Rank matching policies deterministically.
+
+        Higher values are more specific. The ranking prefers:
+        1. more restrictive operators (equals > contains > not_equals),
+        2. longer expected values for contains rules,
+        3. more rules when match mode is all.
+
+        Policy creation order is intentionally not used as a business priority.
+        """
+        condition = policy.condition or {}
+        rules = condition.get("rules", [])
+        match_mode = str(condition.get("match", "all")).lower()
+
+        if not rules:
+            return (0, 0, 0, 0)
+
+        operator_weight = {
+            "equals": 300,
+            "eq": 300,
+            "contains": 200,
+            "contains_text": 200,
+            "not_equals": 100,
+            "ne": 100,
+        }
+
+        rule_scores: list[int] = []
+        expected_lengths: list[int] = []
+
+        for rule in rules:
+            operator = str(
+                rule.get("operator", "equals")
+            ).strip().lower()
+            expected = rule.get("value")
+
+            base = operator_weight.get(operator, 0)
+            length = len(str(expected).strip()) if expected is not None else 0
+
+            rule_scores.append(base + min(length, 100))
+            expected_lengths.append(length)
+
+        strongest_rule = max(rule_scores, default=0)
+        total_rule_score = sum(rule_scores)
+        total_expected_length = sum(expected_lengths)
+        rule_count = len(rules) if match_mode == "all" else 1
+
+        return (
+            strongest_rule,
+            total_rule_score,
+            rule_count,
+            total_expected_length,
+        )
+
     def matching_policies(
         self,
         db: Session,
@@ -158,8 +213,150 @@ class CorrelationPolicyService:
             .all()
         )
 
-        return [
+        matches = [
             policy
             for policy in policies
             if self.matches(alert_1, alert_2, policy)
         ]
+
+        # Evaluate every matching policy, then rank the matches so a more
+        # specific rule is preferred over a broader rule.
+        matches.sort(
+            key=lambda policy: (
+                self.specificity_score(policy),
+                -policy.id,
+            ),
+            reverse=True,
+        )
+
+        return matches
+
+    def matches_alert(
+        self,
+        alert,
+        policy: CorrelationPolicy,
+    ) -> bool:
+        """
+        Check whether a single alert belongs to a
+        correlation policy.
+
+        Time window is intentionally not checked here,
+        because a time window only makes sense when
+        comparing two alerts.
+        """
+
+        if not policy.enabled:
+            return False
+
+        condition = policy.condition or {}
+
+        rules = condition.get(
+            "rules",
+            [],
+        )
+
+        match_mode = str(
+            condition.get(
+                "match",
+                "all",
+            )
+        ).lower()
+
+        if not rules:
+            return True
+
+        results = []
+
+        for rule in rules:
+            field = rule.get("field")
+            operator = rule.get(
+                "operator",
+                "equals",
+            )
+            expected = rule.get("value")
+
+            if field == "tag":
+                if not isinstance(
+                    expected,
+                    str,
+                ):
+                    results.append(False)
+                    continue
+
+                results.append(
+                    self._alert_has_tag(
+                        alert,
+                        expected,
+                    )
+                )
+                continue
+
+            if field not in self.FIELD_NAMES:
+                results.append(False)
+                continue
+
+            actual_value = getattr(
+                alert,
+                field,
+                None,
+            )
+
+            results.append(
+                self._value_matches(
+                    actual_value,
+                    operator,
+                    expected,
+                )
+            )
+
+        if match_mode == "any":
+            return any(results)
+
+        return all(results)
+
+    def policies_for_alert(
+        self,
+        db: Session,
+        alert,
+    ) -> list[CorrelationPolicy]:
+        policies = (
+            db.query(CorrelationPolicy)
+            .filter(
+                CorrelationPolicy.enabled.is_(True)
+            )
+            .all()
+        )
+
+        matches = [
+            policy
+            for policy in policies
+            if self.matches_alert(
+                alert,
+                policy,
+            )
+        ]
+
+        matches.sort(
+            key=lambda policy: (
+                self.specificity_score(
+                    policy
+                ),
+                -policy.id,
+            ),
+            reverse=True,
+        )
+
+        return matches
+
+
+    def select_policy_for_alert(
+        self,
+        db: Session,
+        alert,
+    ) -> CorrelationPolicy | None:
+        matches = self.policies_for_alert(
+            db,
+            alert,
+        )
+
+        return matches[0] if matches else None

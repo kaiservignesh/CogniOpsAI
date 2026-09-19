@@ -32,7 +32,6 @@ import {
 } from "../api/workflows";
 
 import {
-  Alert,
   Box,
   Button,
   Card,
@@ -248,7 +247,7 @@ export default function WorkflowBuilder() {
    */
   useEffect(() => {
     if (!editingId) {
-      setLoadingPolicy(false);
+      //setLoadingPolicy(false);
       return;
     }
 
@@ -491,7 +490,7 @@ export default function WorkflowBuilder() {
     }
   };
 
-  if (loadingPolicy) {
+  if (editingId && loadingPolicy) {
     return (
       <Typography>
         Loading notification workflow...

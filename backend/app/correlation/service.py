@@ -38,36 +38,72 @@ class CorrelationService:
             .filter(
                 Alert.id != alert.id,
                 Alert.situation_id.is_(None),
-                func.lower(Alert.status).notin_(
-                    ["resolved", "closed"]
-                ),
             )
             .all()
         )
 
-        # return [
-        #     candidate
-        #     for candidate in alerts
-        #     if self.engine.are_related(
-        #         alert,
-        #         candidate,
-        #     )
-        # ]
-
-        related_alerts = []
-        
-        for candidate in alerts:
-            policy_matches = self.policy_service.matching_policies(
+        selected_policy = (
+            self.policy_service.select_policy_for_alert(
                 db,
                 alert,
-                candidate,
+            )
+        )
+
+        related_alerts = []
+
+        for candidate in alerts:
+            candidate_policy = (
+                self.policy_service.select_policy_for_alert(
+                    db,
+                    candidate,
+                )
             )
 
-            if policy_matches or self.engine.are_related(
+            # -------------------------------------------------
+            # User-defined correlation policies
+            # -------------------------------------------------
+
+            if (
+                selected_policy is not None
+                or candidate_policy is not None
+            ):
+                # An alert governed by a user policy must
+                # correlate only with another alert governed
+                # by the SAME primary policy.
+                if (
+                    selected_policy is None
+                    or candidate_policy is None
+                ):
+                    continue
+
+                if (
+                    selected_policy.id
+                    != candidate_policy.id
+                ):
+                    continue
+
+                if self.policy_service.matches(
+                    alert,
+                    candidate,
+                    selected_policy,
+                ):
+                    related_alerts.append(
+                        candidate
+                    )
+
+                continue
+
+            # -------------------------------------------------
+            # Existing score-based correlation
+            # -------------------------------------------------
+
+            if self.engine.are_related(
                 alert,
                 candidate,
             ):
-                related_alerts.append(candidate)
+                related_alerts.append(
+                    candidate
+                )
 
         return related_alerts
 
@@ -90,6 +126,17 @@ class CorrelationService:
         best_score = 0
         best_reasons = []
 
+        # ---------------------------------------------------------
+        # Select the strongest policy for the NEW alert
+        # ---------------------------------------------------------
+
+        selected_policy = (
+            self.policy_service.select_policy_for_alert(
+                db,
+                alert,
+            )
+        )
+
         for situation in situations:
             situation_alerts = (
                 db.query(Alert)
@@ -101,42 +148,81 @@ class CorrelationService:
             )
 
             for existing_alert in situation_alerts:
-                # score = self.engine.calculate_score(
-                #     alert,
-                #     existing_alert,
-                # )
 
-                policy_matches = self.policy_service.matching_policies(
-                    db,
-                    alert,
-                    existing_alert,
+                # -------------------------------------------------
+                # Select the strongest policy for the EXISTING alert
+                # -------------------------------------------------
+
+                candidate_policy = (
+                    self.policy_service.select_policy_for_alert(
+                        db,
+                        existing_alert,
+                    )
                 )
 
-                if policy_matches:
+                # -------------------------------------------------
+                # User-defined correlation policies
+                # -------------------------------------------------
+
+                if (
+                    selected_policy is not None
+                    or candidate_policy is not None
+                ):
+                    # One alert has a user policy and the other
+                    # does not → do not correlate via user policy.
+                    if (
+                        selected_policy is None
+                        or candidate_policy is None
+                    ):
+                        continue
+
+                    # Different primary policies cannot correlate.
+                    if (
+                        selected_policy.id
+                        != candidate_policy.id
+                    ):
+                        continue
+
+                    # Both alerts must satisfy the SAME policy.
+                    if not self.policy_service.matches(
+                        alert,
+                        existing_alert,
+                        selected_policy,
+                    ):
+                        continue
+
                     score = 100
+
                     reasons = [
-                        f"Matched correlation policy: {policy.name}"
-                        for policy in policy_matches
+                        (
+                            "Matched correlation policy: "
+                            f"{selected_policy.name}"
+                        )
                     ]
+
+                # -------------------------------------------------
+                # Existing score-based correlation
+                # -------------------------------------------------
+
                 else:
                     score = self.engine.calculate_score(
                         alert,
                         existing_alert,
                     )
+
                     reasons = self.engine.get_reasons(
                         alert,
                         existing_alert,
                     )
 
+                # -------------------------------------------------
+                # Keep strongest Situation
+                # -------------------------------------------------
+
                 if score > best_score:
                     best_score = score
                     best_match = situation
-                    best_reasons = (
-                        self.engine.get_reasons(
-                            alert,
-                            existing_alert,
-                        )
-                    )
+                    best_reasons = reasons
 
         if best_score < 60:
             return None
@@ -455,36 +541,42 @@ class CorrelationService:
         best_reasons = []
 
         for candidate in related_alerts:
-            # score = self.engine.calculate_score(
-            #     alert,
-            #     candidate,
-            # )
 
-            # if score > best_rule_score:
-            #     best_rule_score = score
-            #     best_reasons = (
-            #         self.engine.get_reasons(
-            #             alert,
-            #             candidate,
-            #         )
-            #     )
-            policy_matches = self.policy_service.matching_policies(
-                db,
-                alert,
-                candidate,
+            selected_policy = (
+                self.policy_service.select_policy_for_alert(
+                    db,
+                    alert,
+                )
             )
 
-            if policy_matches:
+            candidate_policy = (
+                self.policy_service.select_policy_for_alert(
+                    db,
+                    candidate,
+                )
+            )
+
+            if (
+                selected_policy is not None
+                and candidate_policy is not None
+                and selected_policy.id
+                == candidate_policy.id
+            ):
                 score = 100
+
                 reasons = [
-                    f"Matched correlation policy: {policy.name}"
-                    for policy in policy_matches
+                    (
+                        "Matched correlation policy: "
+                        f"{selected_policy.name}"
+                    )
                 ]
+
             else:
                 score = self.engine.calculate_score(
                     alert,
                     candidate,
                 )
+
                 reasons = self.engine.get_reasons(
                     alert,
                     candidate,
