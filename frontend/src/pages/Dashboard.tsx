@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   Alert as MuiAlert,
+  Box,
   Card,
   CardContent,
-  Grid,
   LinearProgress,
   Typography,
 } from "@mui/material";
@@ -43,9 +43,9 @@ export default function Dashboard() {
   ) {
     return (
       <MuiAlert severity="error">
-        Unable to load dashboard data.
-        Please verify that the backend is running and
-        that your JWT session is valid.
+        Unable to load dashboard data. Please verify that
+        the backend is running and that your JWT session is
+        valid.
       </MuiAlert>
     );
   }
@@ -64,37 +64,25 @@ export default function Dashboard() {
 
   const criticalSituations = situations.filter(
     (situation) =>
-      situation.severity.toLowerCase() ===
-      "critical",
+      situation.severity.toLowerCase() === "critical",
   ).length;
 
   const aiAnalyzedSituations = situations.filter(
-    (situation) =>
-      situation.ai_status === "Completed",
+    (situation) => situation.ai_status === "Completed",
   ).length;
 
   const successfulExecutions = executions.filter(
-    (execution) =>
-      execution.status === "Success",
+    (execution) => execution.status === "Success",
   ).length;
 
   const cards = [
-    {
-      title: "Total Alerts",
-      value: totalAlerts,
-    },
-    {
-      title: "Open Situations",
-      value: openSituations,
-    },
+    { title: "Total Alerts", value: totalAlerts },
+    { title: "Open Situations", value: openSituations },
     {
       title: "Critical Situations",
       value: criticalSituations,
     },
-    {
-      title: "AI Analyzed",
-      value: aiAnalyzedSituations,
-    },
+    { title: "AI Analyzed", value: aiAnalyzedSituations },
     {
       title: "Workflow Success",
       value: successfulExecutions,
@@ -102,62 +90,77 @@ export default function Dashboard() {
   ];
 
   return (
-    <>
-      <Typography
-        variant="h4"
-        fontWeight={700}
-        gutterBottom
-      >
+    <Box>
+      <Typography variant="h4" gutterBottom>
         Dashboard
       </Typography>
 
-      <Typography
-        color="text.secondary"
-        sx={{ mb: 3 }}
-      >
+      <Typography color="text.secondary" sx={{ mb: 3 }}>
         CogniOpsAI operational overview
       </Typography>
 
-      <Grid container spacing={3}>
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: {
+            xs: "1fr",
+            sm: "repeat(2, minmax(0, 1fr))",
+            md: "repeat(3, minmax(0, 1fr))",
+            lg: "repeat(5, minmax(0, 1fr))",
+          },
+          gap: 2.5,
+          alignItems: "stretch",
+        }}
+      >
         {cards.map((card) => (
-          <Grid
+          <Card
             key={card.title}
-            size={{
-              xs: 12,
-              sm: 6,
-              md: 4,
-              lg: 2.4,
+            sx={{
+              height: "100%",
+              minHeight: 132,
             }}
           >
-            <Card>
-              <CardContent>
-                <Typography
-                  color="text.secondary"
-                  variant="body2"
-                  gutterBottom
-                >
-                  {card.title}
-                </Typography>
+            <CardContent
+              sx={{
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                p: 2.5,
+                "&:last-child": {
+                  pb: 2.5,
+                },
+              }}
+            >
+              <Typography
+                color="text.secondary"
+                variant="body2"
+                sx={{
+                  fontWeight: 600,
+                  lineHeight: 1.3,
+                }}
+              >
+                {card.title}
+              </Typography>
 
-                <Typography
-                  variant="h3"
-                  fontWeight={700}
-                >
-                  {card.value}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
+              <Typography
+                variant="h3"
+                sx={{
+                  fontWeight: 800,
+                  lineHeight: 1,
+                  mt: 2,
+                }}
+              >
+                {card.value}
+              </Typography>
+            </CardContent>
+          </Card>
         ))}
-      </Grid>
+      </Box>
 
-      <Card sx={{ mt: 4 }}>
-        <CardContent>
-          <Typography
-            variant="h6"
-            fontWeight={600}
-            gutterBottom
-          >
+      <Card sx={{ mt: 3 }}>
+        <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
+          <Typography variant="h6" gutterBottom>
             Recent Workflow Executions
           </Typography>
 
@@ -166,22 +169,48 @@ export default function Dashboard() {
               No workflow executions found.
             </Typography>
           ) : (
-            executions.slice(0, 5).map(
-              (execution) => (
-                <Typography
+            <Box>
+              {executions.slice(0, 5).map((execution) => (
+                <Box
                   key={execution.id}
-                  variant="body2"
-                  sx={{ py: 0.75 }}
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                    py: 1,
+                    borderBottom: 1,
+                    borderColor: "divider",
+                    "&:last-child": {
+                      borderBottom: 0,
+                    },
+                  }}
                 >
-                  Execution #{execution.id} —{" "}
-                  {execution.action_type ?? "Unknown"} —{" "}
-                  {execution.status}
-                </Typography>
-              ),
-            )
+                  <Typography
+                    variant="body2"
+                    sx={{ flex: 1 }}
+                  >
+                    Execution #{execution.id} —{" "}
+                    {execution.action_type ?? "Unknown"}
+                  </Typography>
+
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontWeight: 700,
+                      color:
+                        execution.status === "Success"
+                          ? "success.main"
+                          : "text.primary",
+                    }}
+                  >
+                    {execution.status}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
           )}
         </CardContent>
       </Card>
-    </>
+    </Box>
   );
 }

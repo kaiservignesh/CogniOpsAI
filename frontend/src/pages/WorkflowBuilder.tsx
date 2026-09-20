@@ -24,6 +24,8 @@ import {
 
 import "@xyflow/react/dist/style.css";
 
+import { useAppTheme } from "../theme/useAppTheme";
+
 import {
   createWorkflowPolicy,
   getWorkflowPolicies,
@@ -162,6 +164,7 @@ const nodeTypes = {
 };
 
 export default function WorkflowBuilder() {
+  const { mode } = useAppTheme();
   const navigate = useNavigate();
 
   const { id } =
@@ -695,6 +698,7 @@ export default function WorkflowBuilder() {
               }}
             >
               <ReactFlow
+                className={mode === "dark" ? "dark" : ""}
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={nodeTypes}

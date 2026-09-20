@@ -29,6 +29,8 @@ import {
 
 import "@xyflow/react/dist/style.css";
 
+import { useAppTheme } from "../theme/useAppTheme";
+
 import {
   Alert,
   Box,
@@ -209,6 +211,7 @@ const nodeTypes = {
 };
 
 export default function CorrelationWorkflowBuilder() {
+  const { mode: themeMode } = useAppTheme();
   const navigate = useNavigate();
 
   const { id } =
@@ -376,50 +379,42 @@ export default function CorrelationWorkflowBuilder() {
       });
   }, [editingId]);
 
-  /*
-   * Generate JSON whenever visual
-   * fields change.
-   */
-  useEffect(() => {
-    const generated = {
-      name: name.trim(),
-
-      description:
-        description.trim() ||
-        undefined,
-
-      enabled: true,
-
-      condition: {
-        match: matchMode,
-
-        rules: activeRules.map(
-          ({
-            // id: _id,
-            ...rule
-          }) => rule,
-        ),
-      },
-
-      time_window_minutes:
-        timeWindow,
-    };
-
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setJsonText(
+  const generatedJson = useMemo(
+    () =>
       JSON.stringify(
-        generated,
+        {
+          name: name.trim(),
+          description:
+            description.trim() ||
+            undefined,
+          enabled: true,
+          condition: {
+            match: matchMode,
+            rules: activeRules.map(
+              (rule) => ({
+                field: rule.field,
+                operator: rule.operator,
+                value: rule.value,
+              }),
+            ),
+          },
+          time_window_minutes:
+            timeWindow,
+        },
         null,
         2,
       ),
-    );
-  }, [
-    name,
-    description,
-    matchMode,
-    timeWindow,
-    activeRules,
-  ]);
+    [
+      name,
+      description,
+      matchMode,
+      timeWindow,
+      activeRules,
+    ],
+  );
+
+  const previewJson =
+    mode === "json" ? jsonText : generatedJson;
 
   const onConnect =
     useCallback(
@@ -706,11 +701,16 @@ export default function CorrelationWorkflowBuilder() {
             value === "visual" &&
             mode === "json"
           ) {
-            if (
-              !handleJsonToVisual()
-            ) {
+            if (!handleJsonToVisual()) {
               return;
             }
+          }
+
+          if (
+            value === "json" &&
+            mode === "visual"
+          ) {
+            setJsonText(generatedJson);
           }
 
           setMode(value);
@@ -1067,6 +1067,7 @@ export default function CorrelationWorkflowBuilder() {
                 }}
               >
                 <ReactFlow
+                  className={themeMode === "dark" ? "dark" : ""}
                   nodes={nodes}
                   edges={edges}
                   nodeTypes={
@@ -1120,7 +1121,7 @@ export default function CorrelationWorkflowBuilder() {
             <Button
               variant="outlined"
               onClick={() =>
-                navigator.clipboard.writeText(jsonText)
+                navigator.clipboard.writeText(previewJson)
               }
             >
               Copy JSON
@@ -1131,7 +1132,7 @@ export default function CorrelationWorkflowBuilder() {
             fullWidth
             multiline
             minRows={12}
-            value={jsonText}
+            value={previewJson}
             InputProps={{
               readOnly: true,
             }}

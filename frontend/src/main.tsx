@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 
 import App from "./App";
+import { AppThemeProvider } from "./theme/AppThemeProvider";
 
 import "./index.css";
 
@@ -18,7 +19,9 @@ createRoot(
     <QueryClientProvider
       client={queryClient}
     >
-      <App />
+      <AppThemeProvider>
+        <App />
+      </AppThemeProvider>
     </QueryClientProvider>
   </StrictMode>,
 );
